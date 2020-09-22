@@ -1,5 +1,8 @@
+.PHONY: run-fraction
+run-fraction: fraction
+	./fraction
 fraction: fraction.cpp
-	g++ fraction.cpp -o fraction -std=c++14
+	g++ fraction.cpp -o fraction -std=c++14 -g -O0 -fsanitize=address -fsanitize=undefined -static-libasan
 
 # https://pandoc.org/MANUAL.html#literate-haskell-support
 index.html: Reference.lhs makefile header

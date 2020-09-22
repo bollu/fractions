@@ -42,16 +42,18 @@ struct LFT {
     virtual int branch() const = 0;
 
     // do I need cons? no idea. page 188
-    const Expr *cons(std::function<const Expr *(int)> f) const {
-        return nullptr;
-    }
-
+    virtual const Expr *cons(std::function<const Expr *(int)> f) const = 0;
     virtual const Expr *app(std::function<const Expr *(int)> f) const = 0;
 
     static const LFT *dot(int i, const LFT *a, const LFT *b);
 };
 
-struct Vec : public LFT {
+struct Expr {
+    virtual const LFT *head() const = 0;
+    virtual const Expr *tail(int i) const = 0;
+};
+
+struct Vec : public LFT, public Expr {
     int v0, v1;
     Vec(int v0, int v1) : v0(v0), v1(v1), LFT(LFTType::Vec){};
     int dot(Vec v) { return v0 * v.v0 + v1 * v.v1; }
@@ -93,6 +95,20 @@ struct Vec : public LFT {
         assert(false && "unimplemented for this class");
         return nullptr;
     }
+
+    const Expr *cons(std::function<const Expr *(int)> f) const override {
+        return new Vec(*this);
+    }
+
+    const LFT *head() const override {
+        return new Vec(*this);
+    }
+
+    const Expr *tail(int i) const override {
+        assert(false && "vec has no tail!");
+        exit(1);
+    }
+
 
     bool operator<(const Vec &other) const;
 };
@@ -161,6 +177,19 @@ struct Mat : public LFT {
     static bool disjoint(const Mat &m, const Mat &n) {
         return (m < n) || (n < m);
     }
+
+    bool operator==(const Mat &other) const {
+        for (int i = 0; i < 2; ++i) {
+            for (int j = 0; j < 2; ++j) {
+                if (mat[i][j] != other.mat[i][j]) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    const Expr *cons(std::function<const Expr *(int)> f) const override;
 };
 
 bool Vec::operator<(const Vec &other) const {
@@ -188,7 +217,12 @@ const Mat idpos(dpos.inverse());
 
 struct Tensor : public LFT {
     const Mat ms[2];
-    Tensor(Mat m0, Mat m1) : ms{m0, m1}, LFT(LFTType::Tensor){};
+    const int n = 0;  // for absorption
+
+    Tensor(Mat m0, Mat m1, int n = 0)
+        : ms{m0, m1}, LFT(LFTType::Tensor), n(n){};
+
+    Tensor bumpn() const { return Tensor(ms[0], ms[1], n + 1); }
 
     static LFTType getLFTType() { return LFTType::Tensor; }
 
@@ -237,6 +271,21 @@ struct Tensor : public LFT {
     int branch() const override { return 2; }
 
     const Expr *app(std::function<const Expr *(int)> g) const override;
+
+    Tensor scale() const {
+        for (int i = 0; i < 2; ++i) {
+            for (int j = 0; j < 2; ++j) {
+                for (int k = 0; k < 2; ++k) {
+                    if (ms[i].mat[j][k] % 2 != 0) {
+                        return *this;
+                    }
+                }
+            }
+        }
+        return Tensor(m0().scale(), m1().scale());
+    }
+
+    const Expr *cons(std::function<const Expr *(int)> f) const override;
 };
 
 Tensor Mat::dot(const Tensor &t) const {
@@ -248,46 +297,122 @@ const Tensor tsub(Mat(0, 0, 1, 0), Mat(-1, 0, 0, 1));
 const Tensor tmul(Mat(1, 0, 0, 0), Mat(0, 0, 0, 1));
 const Tensor tdiv(Mat(0, 0, 1, 0), Mat(0, 1, 0, 1));
 
-const LFT *dotLFT(int i, const LFT *a, const LFT *b) {
-    // page 185
-    assert(false);
-}
 
-struct Expr {
-    virtual const LFT *head() const = 0;
-    virtual const Expr *tail(int i) const = 0;
+struct ExprThunk {
+    ExprThunk(std::function<const Expr *()> thunk) : thunk(thunk){};
+    const Expr *get() const {
+        if (!value) {
+            value = thunk();
+        }
+        return value;
+    }
+
+    static ExprThunk thunkify(const Expr *e) {
+        return ExprThunk([e]() { return e; });
+    }
+
+   private:
+    std::function<const Expr *()> thunk;
+    mutable const Expr *value = nullptr;
 };
 
 struct MatExpr : public Expr {
     const Mat m;
-    const Expr *e;
-    MatExpr(Mat m, const Expr *e) : m(m), e(e) {}
+    const ExprThunk ethunk;
+    // const Expr *e;
+    MatExpr(Mat m, ExprThunk ethunk) : m(m), ethunk(ethunk) {}
 
     const LFT *head() const override { return new Mat(m); }
     const Expr *tail(int i) const override {
         assert(i == 1);
-        return e;
+        return ethunk.get();
     }
 };
+
+const Expr *Mat::cons(std::function<const Expr *(int)> f) const {
+    return new MatExpr(*this, ExprThunk([f]() { return f(1); }));
+}
+
 // counter for each tensor, fair absorption (section 11.6)
 struct TensorExpr : public Expr {
     Tensor t;
     int counter;
-    const Expr *l;
-    const Expr *r;
+    const ExprThunk lthunk;
+    const ExprThunk rthunk;
 
-    TensorExpr(Tensor t, int counter, const Expr *l, const Expr *r)
-        : t(t), counter(counter), l(l), r(r){};
+    TensorExpr(Tensor t, int counter, const ExprThunk lthunk,
+               const ExprThunk rthunk)
+        : t(t), counter(counter), lthunk(lthunk), rthunk(rthunk){};
 
     const LFT *head() const override { return new Tensor(t); }
     const Expr *tail(int i) const override {
         assert(i == 1 || i == 2);
-        return i == 1 ? l : r;
+        return i == 1 ? lthunk.get() : rthunk.get();
     }
 };
 
+const Expr *Tensor::cons(std::function<const Expr *(int)> f) const {
+    return new TensorExpr(*this, this->n, 
+            ExprThunk([f]() { return f(1); }),
+            ExprThunk([f]() { return f(2); }));
+}
+
+// Page 185
 const LFT *LFT::dot(int i, const LFT *l, const LFT *r) {
-    assert(false && "unimplemented");
+    assert(i == 1 || i == 2);
+    if (i == 1) {
+        assert(l->isa<Mat>() || l->isa<Tensor>());
+
+        if (l->isa<Mat>()) {
+            const Mat *m = l->cast<Mat>();
+            if (r->isa<Vec>()) {
+                const Vec *v = r->cast<Vec>();
+                return new Vec(m->dot(*v).scale());
+            } else if (r->isa<Mat>()) {
+                const Mat *n = r->cast<Mat>();
+                return new Mat(m->dot(*n).scale());
+            } else {
+                assert(r->isa<Tensor>());
+                const Tensor *t = r->cast<Tensor>();
+                return new Tensor(m->dot(*t).scale());
+            }
+        } else {
+            assert(l->isa<Tensor>());
+            const Tensor *t = l->cast<Tensor>();
+            assert(r->isa<Vec>() || r->isa<Mat>());
+            if (r->isa<Vec>()) {
+                const Vec *v = r->cast<Vec>();
+                return new Mat(t->left(*v).scale());
+            } else {
+                assert(r->isa<Mat>());
+                const Mat *m = r->cast<Mat>();
+                if (*m == Mat::identity()) {
+                    return t;
+                } else {
+                    return new Tensor(t->left(*m).scale().bumpn());
+                }
+            }
+        };
+    } else {
+        assert(i == 2);
+        assert(l->isa<Tensor>());
+        const Tensor *t = l->cast<Tensor>();
+
+        // same as previous code, just left switched to right
+        assert(r->isa<Vec>() || r->isa<Mat>());
+        if (r->isa<Vec>()) {
+            const Vec *v = r->cast<Vec>();
+            return new Mat(t->right(*v).scale());
+        } else {
+            assert(r->isa<Mat>());
+            const Mat *m = r->cast<Mat>();
+            if (*m == Mat::identity()) {
+                return t;
+            } else {
+                return new Tensor(t->right(*m).scale().bumpn());
+            }
+        }
+    }
 }
 
 const Expr *Mat::app(std::function<const Expr *(int)> g) const {
@@ -326,17 +451,19 @@ struct Digits {
     }
 };
 
-Expr *erec(const Expr *e) { return new MatExpr(Mat(0, 1, 1, 0), e); }
+Expr *erec(const Expr *e) {
+    return new MatExpr(Mat(0, 1, 1, 0), ExprThunk::thunkify(e));
+}
 
 struct Uefp {
-    //
     const Digits digits;
     const Expr *e;
 
     Uefp(Digits digits, const Expr *e) : digits(digits), e(e){};
-
     Uefp urec() const { return Uefp(Digits(digits.d0, -digits.d1), erec(e)); }
-    const Expr *to_expr() const { return new MatExpr(digits.to_mat(), e); }
+    const Expr *to_expr() const {
+        return new MatExpr(digits.to_mat(), ExprThunk::thunkify(e));
+    }
 };
 
 // signed exact floating point
@@ -503,7 +630,6 @@ std::tuple<int, int, int> normalize(int e, int l, int v) {
     }
 }
 
-
 std::string sshow(deque<int> numbers) {
     if (numbers.size() == 0) {
         return "unbounded";
@@ -562,20 +688,24 @@ std::deque<int> mantissa(int i, int n, Mat mat) {
 
 const Expr *eiterate(std::function<Mat(int)> f, int n) {
     // this needs to be lazy, will instantly blow up
-    assert(false && "need laziness");
-    return new MatExpr(f(n), eiterate(f, n + 1));
+    return new MatExpr(f(n),
+                       ExprThunk([f, n]() { return eiterate(f, n + 1); }));
 }
 
 const Expr *eiteratex(std::function<Tensor(int)> f, int n, const Expr *x) {
-    return new TensorExpr(f(n), 0, x, eiteratex(f, n + 1, x));
+    return new TensorExpr(
+        f(n), 0, ExprThunk::thunkify(x),
+        ExprThunk([f, n, x]() { return eiteratex(f, n + 1, x); }));
 }
 
 const Expr *rollover(int a, int b, int c) {
     const int d = 2 * (b - a) + c;
     if (d >= 0) {
-        return new MatExpr(dneg, rollover(4 * a, d, c));
+        return new MatExpr(
+            dneg, ExprThunk([a, d, c]() { return rollover(4 * a, d, c); }));
     } else {
-        return new MatExpr(dpos, rollover(-d, 4 * b, c));
+        return new MatExpr(
+            dpos, ExprThunk([b, d, c]() { return rollover(-d, 4 * b, c); }));
     }
 }
 
@@ -624,7 +754,8 @@ const Expr *epi() {
             }
         },
         0);
-    return new TensorExpr(tdiv, 0, esqrtrat(1005, 1), eomega);
+    return new TensorExpr(tdiv, 0, ExprThunk::thunkify(esqrtrat(1005, 1)),
+                          ExprThunk::thunkify(eomega));
 }
 
 // tangent: Section 10.2.5
@@ -633,7 +764,7 @@ const Expr *etanszer() { assert(false && "unimplemented"); }
 const Expr *earctanszer() { assert(false && "unimplemented"); }
 
 int main() {
-    for(int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 10; ++i) {
         std::cout << "pi upto " << i << "places: " << eshow(epi(), 10);
     }
     return 0;
