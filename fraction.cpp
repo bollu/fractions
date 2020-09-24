@@ -4,6 +4,7 @@
 #include <functional>
 #include <utility>
 #include <vector>
+
 using namespace std;
 using num = int;
 using ll = long long;
@@ -15,30 +16,42 @@ struct Expr;
 struct LFT;
 
 struct OutFile {
-   public:
+public:
     OutFile(const char *path) { f = fopen(path, "w"); }
-    OutFile(FILE *f) : f(f){};
+
+    OutFile(FILE *f) : f(f) {};
+
     ~OutFile() { fflush(f); }
 
     void write(void *p) { fprintf(f, "%p", p); }
+
     void write(const std::string &s) { fprintf(f, "%s", s.c_str()); }
+
     void write(int i) { fprintf(f, "%d", i); }
+
     void write(ll i) { fprintf(f, "%lld", i); }
-    void write(char c) { 
+
+    void write(char c) {
         fputc(c, f);
         if (c == '\n') {
-            for(int i = 0; i < indentLevel; ++i) {
-                for(int j = 0; j < 2; ++j) { fputc(' ', f); }
+            for (int i = 0; i < indentLevel; ++i) {
+                for (int j = 0; j < 2; ++j) { fputc(' ', f); }
+                fputs("┆", f);
                 // fputc('|', f);
             }
         }
     }
-    void write(const char *s) { while(*s != '\0') { write(*s++); } }
+
+    void write(const char *s) { while (*s != '\0') { write(*s++); }}
 
     void indent() { indentLevel++; }
-    void dedent() { indentLevel--; assert(indentLevel >= 0); }
 
-   private:
+    void dedent() {
+        indentLevel--;
+        assert(indentLevel >= 0);
+    }
+
+private:
     ll indentLevel = 0;
     FILE *f;
 };
@@ -47,6 +60,7 @@ OutFile &operator<<(OutFile &f, const std::string &s) {
     f.write(s.c_str());
     return f;
 }
+
 OutFile &operator<<(OutFile &f, int i) {
     f.write(i);
     return f;
@@ -56,6 +70,7 @@ OutFile &operator<<(OutFile &f, ll i) {
     f.write(i);
     return f;
 }
+
 OutFile &operator<<(OutFile &f, const char *s) {
     f.write(s);
     return f;
@@ -73,8 +88,13 @@ OutFile &operator<<(OutFile &f, void *p) {
 
 
 struct ScopedIndenter {
-    ScopedIndenter(OutFile &f, const char *preamble="") : f(f) { f.indent(); f << "\n" << preamble << "\n"; }
+    ScopedIndenter(OutFile &f, const char *preamble = "") : f(f) {
+        f.indent();
+        f << "\n" << preamble << "\n";
+    }
+
     ~ScopedIndenter() { f.dedent(); }
+
     OutFile &f;
 };
 
@@ -82,28 +102,34 @@ static OutFile cerr(stderr);
 static OutFile cout(stdout);
 
 void debugPrompt(const char *name) {
-    cerr << "\n" << name << "[press key]>\n"; getchar();
+    cerr << "\n" << name << "[press key]>\n";
+    getchar();
 }
 
-enum class LFTType { Vec, Mat, Tensor };
+enum class LFTType {
+    Vec, Mat, Tensor
+};
+
 struct LFT {
     const LFTType type;
-    LFT(LFTType type) : type(type){};
-    template <typename T>
+
+    LFT(LFTType type) : type(type) {};
+
+    template<typename T>
     bool isa() const {
         return type == T::getLFTType();
     }
 
-    template <typename T>
+    template<typename T>
     const T *cast() const {
         assert(isa<T>());
-        return (T *)this;
+        return (T *) this;
     }
 
-    template <typename T>
+    template<typename T>
     const T *dyn_cast() const {
         if (isa<T>()) {
-            return (T *)this;
+            return (T *) this;
         }
         return nullptr;
     }
@@ -114,27 +140,38 @@ struct LFT {
 
     // do I need cons? no idea. page 188
     virtual const Expr *cons(std::function<const Expr *(int)> f) const = 0;
+
     virtual const Expr *app(std::function<const Expr *(int)> f) const = 0;
 
     static const LFT *dot(int i, const LFT *a, const LFT *b);
 
 };
 
-enum class ExprType {Vec='v', Mat='m', Tensor='t'};
+enum class ExprType {
+    Vec = 'v', Mat = 'm', Tensor = 't'
+};
+
 struct Expr {
     const ExprType exprty;
+
     Expr(ExprType exprty) : exprty(exprty) {};
+
     virtual const LFT *head() const = 0;
+
     virtual const Expr *tail(int i) const = 0;
 };
 
 
 struct Vec : public LFT, public Expr {
     int v0, v1;
-    Vec(int v0, int v1) : v0(v0), v1(v1), LFT(LFTType::Vec), Expr(ExprType::Vec){};
+
+    Vec(int v0, int v1) : v0(v0), v1(v1), LFT(LFTType::Vec), Expr(ExprType::Vec) {};
+
     int dot(Vec v) { return v0 * v.v0 + v1 * v.v1; }
+
     static LFTType getLFTType() { return LFTType::Vec; }
 
+    // sign() = clamp(-1, sgn(v0) + sgn(v1), 1)
     int sign() const {
         if (v0 < 0) {
             return v1 <= 0 ? -1 : 0;
@@ -190,33 +227,41 @@ struct Vec : public LFT, public Expr {
 
 
     void print(OutFile &o) const {
-        o << "(" << v0 << " " << v1 << ")";
+        o << "v(" << v0 << " " << v1 << ")";
     }
 };
 
-OutFile &operator << (OutFile &o, Vec v) {
-    v.print(o); return o;
+OutFile &operator<<(OutFile &o, Vec v) {
+    v.print(o);
+    return o;
 }
-
 
 
 struct Mat : public LFT {
     const int mat[2][2];
+
     //   coordinates: (row, col)
     //     |col      col
     //-----+------------------
     // row |a:(0, 0) b:(0, 1)
     // row |c:(1, 0) d:(1, 1)
     int a() const { return mat[0][0]; }
+
     int b() const { return mat[0][1]; }
+
     int c() const { return mat[1][0]; }
-    int d() const { return mat[0][1]; }
+
+    int d() const { return mat[1][1]; }
 
     Vec v0() const { return Vec(a(), b()); }
+
     Vec v1() const { return Vec(c(), d()); }
 
-    Mat(int a, int b, int c, int d) : mat{{a, b}, {c, d}}, LFT(LFTType::Mat) {}
+    Mat(int a, int b, int c, int d) : mat{{a, b},
+                                          {c, d}}, LFT(LFTType::Mat) {}
+
     Mat(Vec v, Vec w) : mat{v.v0, v.v1, w.v0, w.v1}, LFT(LFTType::Mat) {}
+
     static LFTType getLFTType() { return LFTType::Mat; }
 
     static Mat identity() { return Mat(1, 0, 0, 1); }
@@ -236,8 +281,16 @@ struct Mat : public LFT {
         return *this;
     }
 
-    Vec dot(const Vec &v) const { return Vec(v0().dot(v), v1().dot(v)); }
+    // it's all row vector based.
+    // [v0 v1] [m00 m01]  = [v0m00 + v1m10; v0m01 + v1m11]
+    //         [m10 m11]
+    Vec dot(const Vec &v) const {
+        return Vec(mat[0][0] * v.v0 + mat[1][0] * v.v1, mat[0][1] * v.v0 + mat[1][1] * v.v1);
+    }
 
+    // [[t00 t01]] [[m00 m01]] =
+    // [t10 t11]]  [[m10 m11]]
+    // [[t00 t01] [t10 t11]] @ [m00 m01]; [[t00 t01] [t10 t11]] @ [m10 m11]]
     Mat dot(const Mat &m) const {
         return Mat(this->dot(m.v0()), this->dot(m.v1()));
     }
@@ -279,12 +332,13 @@ struct Mat : public LFT {
     const Expr *cons(std::function<const Expr *(int)> f) const override;
 
     void print(OutFile &o) const {
-        o << "(" << v0() << " " << v1() << ")";
+        o << "m(" << v0() << " " << v1() << ")";
     }
 };
 
-OutFile &operator << (OutFile &o, Mat m) {
-    m.print(o); return o;
+OutFile &operator<<(OutFile &o, Mat m) {
+    m.print(o);
+    return o;
 }
 
 bool Vec::operator<(const Vec &other) const {
@@ -316,13 +370,14 @@ struct Tensor : public LFT {
     const int n = 0;  // for absorption
 
     Tensor(Mat m0, Mat m1, int n = 0)
-        : ms{m0, m1}, LFT(LFTType::Tensor), n(n){};
+            : ms{m0, m1}, LFT(LFTType::Tensor), n(n) {};
 
     Tensor bumpn() const { return Tensor(ms[0], ms[1], n + 1); }
 
     static LFTType getLFTType() { return LFTType::Tensor; }
 
     Mat m0() const { return ms[0]; }
+
     Mat m1() const { return ms[1]; }
 
     Tensor inverse() const {
@@ -358,7 +413,7 @@ struct Tensor : public LFT {
     bool refine() const override {
         const Vec v = m0().v0();
         const Vec w = m0().v1();
-        const Vec x = m0().v1();
+        const Vec x = m1().v0();
         const Vec y = m1().v1();
         const int a = v.sign(), b = w.sign(), c = x.sign(), d = y.sign();
         return a == b && b == c && c == d && d != 0;
@@ -384,14 +439,14 @@ struct Tensor : public LFT {
     const Expr *cons(std::function<const Expr *(int)> f) const override;
 
     void print(OutFile &o) const {
-        o << "(" << m0() << " " << m1() << ")";
+        o << "t(" << m0() << " " << m1() << ")";
     }
 };
 
-OutFile &operator << (OutFile &o, Tensor t) {
-    t.print(o); return o;
+OutFile &operator<<(OutFile &o, Tensor t) {
+    t.print(o);
+    return o;
 }
-
 
 
 Tensor Mat::dot(const Tensor &t) const {
@@ -404,25 +459,26 @@ const Tensor tmul(Mat(1, 0, 0, 0), Mat(0, 0, 0, 1));
 const Tensor tdiv(Mat(0, 0, 1, 0), Mat(0, 1, 0, 1));
 
 
-OutFile &operator <<(OutFile &o, const LFT &lft) {
-    if(lft.isa<Vec>()) {
+OutFile &operator<<(OutFile &o, const LFT &lft) {
+    if (lft.isa<Vec>()) {
         lft.cast<Vec>()->print(o);
     } else if (lft.isa<Mat>()) {
         lft.cast<Mat>()->print(o);
     } else {
-     assert(lft.isa<Tensor>());
-     lft.cast<Tensor>()->print(o);
+        assert(lft.isa<Tensor>());
+        lft.cast<Tensor>()->print(o);
     }
     return o;
 }
 
-OutFile &operator <<(OutFile &o, const Expr &e) {
-    return o << "Expr(" << (char)e.exprty << " " << (void *)e.head() << " = " << *e.head() << ")";
+OutFile &operator<<(OutFile &o, const Expr &e) {
+    return o << "Expr(" << (char) e.exprty << " " << (void *) e.head() << " = " << *e.head() << ")";
 }
 
 
 struct ExprThunk {
-    ExprThunk(std::function<const Expr *()> thunk) : thunk(thunk){};
+    ExprThunk(std::function<const Expr *()> thunk) : thunk(thunk) {};
+
     const Expr *get() const {
         if (!value) {
             value = thunk();
@@ -434,7 +490,7 @@ struct ExprThunk {
         return ExprThunk([e]() { return e; });
     }
 
-   private:
+private:
     std::function<const Expr *()> thunk;
     mutable const Expr *value = nullptr;
 };
@@ -442,10 +498,12 @@ struct ExprThunk {
 struct MatExpr : public Expr {
     const Mat m;
     const ExprThunk ethunk;
+
     // const Expr *e;
     MatExpr(Mat m, ExprThunk ethunk) : m(m), ethunk(ethunk), Expr(ExprType::Mat) {}
 
     const LFT *head() const override { return new Mat(m); }
+
     const Expr *tail(int i) const override {
         assert(i == 1);
         return ethunk.get();
@@ -465,9 +523,10 @@ struct TensorExpr : public Expr {
 
     TensorExpr(Tensor t, int counter, const ExprThunk lthunk,
                const ExprThunk rthunk)
-        : Expr(ExprType::Tensor), t(t), counter(counter), lthunk(lthunk), rthunk(rthunk){};
+            : Expr(ExprType::Tensor), t(t), counter(counter), lthunk(lthunk), rthunk(rthunk) {};
 
     const LFT *head() const override { return new Tensor(t); }
+
     const Expr *tail(int i) const override {
         assert(i == 1 || i == 2);
         return i == 1 ? lthunk.get() : rthunk.get();
@@ -475,9 +534,9 @@ struct TensorExpr : public Expr {
 };
 
 const Expr *Tensor::cons(std::function<const Expr *(int)> f) const {
-    return new TensorExpr(*this, this->n, 
-            ExprThunk([f]() { return f(1); }),
-            ExprThunk([f]() { return f(2); }));
+    return new TensorExpr(*this, this->n,
+                          ExprThunk([f]() { return f(1); }),
+                          ExprThunk([f]() { return f(2); }));
 }
 
 
@@ -549,7 +608,7 @@ const Expr *Mat::app(std::function<const Expr *(int)> g) const {
 }
 
 const Expr *Tensor::app(std::function<const Expr *(int)> g) const {
-    ScopedIndenter indent(cerr, __PRETTY_FUNCTION__); 
+    ScopedIndenter indent(cerr, __PRETTY_FUNCTION__);
     cerr << "- g(1): " << *g(1) << "\n";
     cerr << "- g(2): " << *g(2) << "\n";
 
@@ -566,7 +625,7 @@ const Expr *Tensor::app(std::function<const Expr *(int)> g) const {
     cerr << "- dotTwo " << *dotTwo << "\n";
     const LFT *dotOne = LFT::dot(1, dotTwo, g(1)->head());
     cerr << "- dotOne " << *dotOne << "\n";
-    cerr << "- " << (void *)dotOne->cons(h) << "\n";
+    cerr << "- dotOne->cons(h) " << *dotOne->cons(h) << "\n";
     return dotOne->cons(h);
 }
 
@@ -574,6 +633,7 @@ const Expr *Tensor::app(std::function<const Expr *(int)> g) const {
 struct Digits {
     const int d0;
     const int d1;
+
     Digits(int d0, int d1) : d0(d0), d1(d1) {}
 
     // n = d0, c = d1
@@ -591,15 +651,20 @@ struct Uefp {
     const Digits digits;
     const Expr *e;
 
-    Uefp(Digits digits, const Expr *e) : digits(digits), e(e){};
+    Uefp(Digits digits, const Expr *e) : digits(digits), e(e) {};
+
     Uefp urec() const { return Uefp(Digits(digits.d0, -digits.d1), erec(e)); }
+
     const Expr *to_expr() const {
         return new MatExpr(digits.to_mat(), ExprThunk::thunkify(e));
     }
 };
 
 // signed exact floating point
-enum class SefpType { Positive, Negative, Inf, Zero };
+enum class SefpType {
+    Positive, Negative, Inf, Zero
+};
+
 struct Sefp {
     const SefpType type;
     const Uefp uefp;
@@ -655,13 +720,16 @@ bool decision(int i, const LFT *lft) {
         return strategyo(*t, i) == 2;
     }
 }
+
 // ===Normalization functions===
 // Absorption function (11.4)
 const Expr *ab(const LFT *k, const Expr *e, bool b);
+
 Sefp sem(const Expr *e, int i);
+
 Uefp dem(Digits d, const Expr *e, int i);
 
-template <typename T>
+template<typename T>
 std::function<T(int)> one(T t) {
     return [t](int i) {
         assert(i == 1);
@@ -674,11 +742,13 @@ Sefp sem(const Expr *e, int i) {
     const LFT *l = e->head();
 
     debugPrompt(__PRETTY_FUNCTION__);
-    ScopedIndenter indent(cerr, __PRETTY_FUNCTION__); 
+    ScopedIndenter indent(cerr, __PRETTY_FUNCTION__);
     cerr << *e << "\n";
-
     auto f = [e, l](int d) { return ab(l, e->tail(d), decision(d, l)); };
-
+    cerr << "- l: " << *l << "\n";
+    cerr << "- isPos: " << ispos << "\n";
+    cerr << "- LFT::dot(1, &ispos, l): " << *LFT::dot(1, &ispos, l) << "\n";
+    cerr << "- LFT::dot(1, &ispos, l)->refine(): " << LFT::dot(1, &ispos, l)->refine() << "\n";
     if (LFT::dot(1, &ispos, l)->refine()) {
         return Sefp(SefpType::Positive,
                     dem(Digits(0, 0), ispos.app(one(e)), i));
@@ -728,8 +798,11 @@ const Expr *ab(const LFT *k, const Expr *e, bool b) {
 }
 
 std::string mshow(Mat m);
+
 std::string sshow(deque<int> numbers);
+
 std::deque<int> scientific(Mat mat, int i);
+
 std::deque<int> mantissa(int i, int n, Mat mat);
 
 std::string eshow(const Expr *e, int i) { return mshow(sem(e, i).to_mat()); }
@@ -830,18 +903,18 @@ const Expr *eiterate(std::function<Mat(int)> f, int n) {
 
 const Expr *eiteratex(std::function<Tensor(int)> f, int n, const Expr *x) {
     return new TensorExpr(
-        f(n), 0, ExprThunk::thunkify(x),
-        ExprThunk([f, n, x]() { return eiteratex(f, n + 1, x); }));
+            f(n), 0, ExprThunk::thunkify(x),
+            ExprThunk([f, n, x]() { return eiteratex(f, n + 1, x); }));
 }
 
 const Expr *rollover(int a, int b, int c) {
     const int d = 2 * (b - a) + c;
     if (d >= 0) {
         return new MatExpr(
-            dneg, ExprThunk([a, d, c]() { return rollover(4 * a, d, c); }));
+                dneg, ExprThunk([a, d, c]() { return rollover(4 * a, d, c); }));
     } else {
         return new MatExpr(
-            dpos, ExprThunk([b, d, c]() { return rollover(-d, 4 * b, c); }));
+                dpos, ExprThunk([b, d, c]() { return rollover(-d, 4 * b, c); }));
     }
 }
 
@@ -851,57 +924,58 @@ const Expr *esqrtrat(int p, int q) { return rollover(p, q, p - q); }
 // sqrt(x) for any x.
 const Expr *esqrtspos(const Expr *e) {
     return eiteratex(
-        [](int n) { return Tensor(Mat(1, 0, 2, 1), Mat(1, 2, 0, 1)); }, 0, e);
+            [](int n) { return Tensor(Mat(1, 0, 2, 1), Mat(1, 2, 0, 1)); }, 0, e);
 }
 
 // elogpos(x) = log(S+(x))
 const Expr *elogpos(const Expr *e) {
     return eiteratex(
-        [](int n) {
-            if (n == 0) {
-                return Tensor(Mat(1, 0, 1, 1), Mat(-1, 1, -1, 0));
-            } else {
-                return Tensor(Mat(n, 0, 2 * n + 1, n + 1),
-                              Mat(n + 1, 2 * n + 1, 0, n));
-            };
-        },
-        0, e);
+            [](int n) {
+                if (n == 0) {
+                    return Tensor(Mat(1, 0, 1, 1), Mat(-1, 1, -1, 0));
+                } else {
+                    return Tensor(Mat(n, 0, 2 * n + 1, n + 1),
+                                  Mat(n + 1, 2 * n + 1, 0, n));
+                };
+            },
+            0, e);
 }
 
 // ee = natural exp
 const Expr *ee() {
     return eiterate(
-        [](int n) { return Mat(2 * n + 2, 2 * n + 1, 2 * n + 1, 2 * n); }, 0);
+            [](int n) { return Mat(2 * n + 2, 2 * n + 1, 2 * n + 1, 2 * n); }, 0);
 }
 
 // Pi: section 10.2.4
 
 const Expr *epi() {
     const Expr *eomega = eiterate(
-        [](int n) {
-            if (n == 0) {
-                return Mat(6795705, 213440, 6795704, 213440);
-            } else {
-                const int b = (2 * n - 1) * (6 * n - 5) * (6 * n - 1);
-                const int c = b * (545140134 * n + 13591409);
-                const int d = b * (n + 1);
-                const int e = 10939058860032000 * powi(n, 4);
-                return Mat(b, c, d, e);
-            }
-        },
-        0);
+            [](int n) {
+                if (n == 0) {
+                    return Mat(6795705, 213440, 6795704, 213440);
+                } else {
+                    const int b = (2 * n - 1) * (6 * n - 5) * (6 * n - 1);
+                    const int c = b * (545140134 * n + 13591409);
+                    const int d = b * (n + 1);
+                    const int e = 10939058860032000 * powi(n, 4);
+                    return Mat(b, c, d, e);
+                }
+            },
+            0);
     return new TensorExpr(tdiv, 0, ExprThunk::thunkify(esqrtrat(1005, 1)),
                           ExprThunk::thunkify(eomega));
 }
 
 // tangent: Section 10.2.5
 const Expr *etanszer() { assert(false && "unimplemented"); }
+
 // arc tangent: Section 10.2.6
 const Expr *earctanszer() { assert(false && "unimplemented"); }
 
 int main() {
     for (int i = 0; i < 10; ++i) {
-        cerr << "pi upto " << i << "places: " << eshow(epi(), 10);
+        cerr << "pi upto " << i << "places: " << eshow(epi(), i);
     }
     return 0;
 }

@@ -1,6 +1,8 @@
 .PHONY: run-fraction clean
+
 run-fraction: fraction
 	./fraction
+
 fraction: fraction.cpp
 	g++ fraction.cpp -o fraction -std=c++14 -g -O0 -fsanitize=address -fsanitize=undefined -static-libasan
 
