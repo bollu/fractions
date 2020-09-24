@@ -212,9 +212,223 @@ two since the convergents occur along a zigzag path in the Farey diagram.
 First, we define a vector as two integers, a matrix as two vectors,
 a tensor as two matrices.
 
+A vector `(p, q)` is used to represent the fraction $p/q$.
+
 > type Vector     = (Integer, Integer)
+
+If we define the product $(a, b) \times (c, d) \equiv (ab, cd)$, we get a monoid.
+We define an interpretation function from these vectors to the extended
+rational numbers:
+
+$$
+\begin{align*}
+&\phi: \texttt{Vector}\infty  \rightarrow \mathbb{Q}^\infty \\
+&\phi(0, 0) \equiv \bot \\
+&\phi(a, 0) \equiv \infty \\
+&\phi(a, b) \equiv a/b \\
+\end{align*}
+$$
+
+See that we only have one infinity, not two (positive and negative infinity).
+So we have compactified/projectivized the space $\mathbb Q$ by adding a
+"point at infinity".
+
+See that $\phi(a, b) = \phi(ka, kb)$, so our `Vector`s are only defined
+upto scaling. Thus, to get unique representatives, we should consider equivalence
+classes of vectors upto scaling. The equivalence relation will be denoted
+by $a \simeq b $.
+
+More formally, the kernel of the map $\phi$ is
+isomorphic to $\mathbb Z^\times$: 
+$$\ker(\phi) = \{ (z, z): z \in \mathbb Z \} \simeq \mathbb Z$$. So our space
+is ismorphic to $Q^\infty / \Z^\times$.
+
+We define the set of unisgned vector $\texttt{Vector}^+$ to be vectors $v$ such
+that $\phi(v) \in [0, \infty]$ (Yes, $\infty$ is included!). 
+We define $|(a, b)| \equiv (|a|, |b|)$.  if $v \n \texttt{Vector}^+$, then $v \simeq |v|$.
+
+
+Let the `sign` function be defined as follows:
+> sgn :: Integer -> Integer
+> sgn 
+>  | a < 0  = (-1)
+>  | a == 0 =  0
+>  | a > 0 =   1
+> clamp :: Integer -> Integer -> Integer
+> clamp lo x hi = max lo (min x hi)
+
+> sign :: Vector -> Integer
+> sign (a, b) = clamp (-1) (sign a + sign b) 1
+
+Note that $V^\plus = \{ v \in V : \sigma(v) \neq 0 \}$, because $\sigma$
+is non-zero if either:
+1. both numerator and denominator are non-zero and
+   have the same sign, thereby evaluating to a positive number $p/q$.
+2. the numerator is zero, denominator non-zero, thereby evaluating to $0$.
+3. the numerator is non-zero and the denominator is zero, thereby evaluating to
+   the single infinity.
+
+
 > type Matrix     = (Vector,Vector)
+
+
+A matrix `(a, b, c, d)` is used to represent the mobius transformation
+$x \mapsto (ax + c)/(bx + d)$.
+
+- A mobius transform $(a, b, c, d)$ whose determinant $ad - bc = 0$ is said
+  to be *singular*. 
+- The set of non-singular mobius transformations whose coefficients
+  are taken from the rationals (more generally, any field) forms a group.
+- We will denote this group as $M(\mathbb Q)$. 
+- We can use the scale invariance to pick our
+  coefficients from $\mathbb Z$. The set of **all** [including singular] mobius
+  transformations forms a monoid.
+- The composition of mobius transformations is equivalent to the multiplication of
+  their matrices.
+- Since our matrices are equivalent up to scaling as well, we can ignore all
+  scale factors, and can thus define the _tame inverse_ $(\cdot)^\dagger$, which is the inverse
+  without the determinant scale factor:
+
+$$
+\begin{bmatrix}
+a & c \\
+b & d 
+\end{bmatrix}^{\dagger} \simeq
+\begin{bmatrix}
+d & -c \\
+-b & a
+\end{bmatrix}
+$$
+
+- See that $MM^\dagger = det(M) I \simeq I$. So as long as we work in 
+  'projective mobius coordinates' where two mobius transforms are equivalent
+  if there are equal upto scaling, we're good.
+
+We define the set of unsigned matrices as 
+
+$$
+M^+ \equiv \{ (a, b, c, d) \in M : \forall (x, y) \in V^+, (ax + c)/(bx + d) \in [0, \infty] \}
+$$
+
+We can also characterize $M^+$ equivalently as :
+
+$$
+M^+ = \{ m \in M : \forall v \in V^+, \phi(M v) \in [0, \infty] \} \\
+M^+ = \{ ((a, b), (c, d)) \in M : \sigma((a, b)) = \sigma((c, d)) \neq 0 \}
+$$
+
+We define $|(a, b, c, d)| = (|a|, |b|, |c|, |d|)$. If $m \in M^+$ then $m = |m|$.
+
+### Theory of mobius transforms
+
+We can first show that there exists mobius transforms that maps any interval
+$[r, s]$ to the "basic open interval" $[0, \infty]$:
+
+$$
+\begin{align*}
+&x \mapsto (sx + r)/(x+1); [0, \infty] \rightarrow [r, s] \\
+&x \mapsto (rx + s)/(x+1); [0, \infty] \rightarrow [s, r] \\
+\end{align*}
+$$
+
+We can both preserve orientation and reverse orientation when we bijectively
+map $[0, \infty] \leftrightarrow [r, s]$.
+
+To see why the above function works, we can write it as:
+$$
+\begin{align*}
+& (sx+r)/(x+1) \\
+&= sx/(x+1) + r/(x+1) \\
+&= s(x+1)/(x+1) - s/(x+1) + r/(x+1) \\
+&= s + (r-s)/(x+1) \\
+\end{align*}
+$$
+
+Clearly, when $x = 0$, we have $s + (r - s) = r$, and when $x = \infty$,
+we have only the $s$ remaining.
+
+#### Refining intervals
+
+We say that a mobius transform $m$ refines an interval $[p, q]$ if
+$m([p, q]) \subseteq [p, q]$. The identity mobius transform refines
+any interval, and the composition of refinements continues to be a refinement.
+Thus, we can consider the largest submonoid of $M$ which refines a given
+interval $[p, q]$. 
+
+- We can see that $M^+$ is the largest refining submonoid of the special
+  base interval $[0, \infty]$.
+- We can also show that $NM^+N^\dagger$ is the largest refining submonoid of
+  $N ([0, \infty])$.
+
+#### Elliptic maps
+
+Good basis for signs, because they are conjugate to rotations.
+
+#### Hyperbolic maps
+
+Good basis for digit sets, because they are conjugate to contracting affine
+maps
+
+$$S_0 = \begin{bmatrix} 1 & -1 \\ 1 & 1 \end{bmatrix} \\S_0([0, \infty]) = [-1, 1]$$
+
+Redundant radix $b$ positional representation has digit set $\mathbb Z(b)$ 
+and the digit map is
+
+$$
+d \mapsto x \mapsto \frac{d + x}{b} \simeq d \mapsto \begin{bmatrix} 1 & d \\ 0 & b \end{bmatrix}
+$$
+
+
 > type Tensor     = (Matrix,Matrix)
+
+A tensor `(((a, b), (c, d)), ((e, f), (g, h)))` is used to represent a 2D mobius 
+transformation:
+$$(x, y) \mapsto (axy + cx + ey + g) / (bxy + dx + fy + h)$$
+
+Basic arithmetic operations are given by tensors:
+
+$$
+\begin{align*}
+&(x + y) \simeq 
+\begin{bmatrix}
+0 1 1 0 \\ 0 0 0 1
+\end{bmatix}(x, y) \\
+%
+&(x - y) \simeq 
+\begin{bmatrix}
+0 1 -1 0 \\ 0 0 0 1
+\end{bmatix}(x, y) \\
+%
+&(x \times y) \simeq 
+\begin{bmatrix}
+1 0 0 0 \\ 0 0 0 1
+\end{bmatix}(x, y) \\
+\end{align*}
+%
+&(x \div y) \simeq 
+\begin{bmatrix}
+0 1 0 0 \\ 0 0 1 0
+\end{bmatix}(x, y) \\
+\end{align*}
+$$
+
+We want to devise operations to collapse the representations of:
+
+- $S(T(x, y), z)$ - to model composition of binary operators (???)
+- $T(M(x), y)$, $T(x, M(y)$ - to model operations on arguments which are transformed
+- $M(T(x, y))$ - to model a transformation of a transform
+- $T(V, y)$, $T(x, V)$ - to model operations on rationals
+
+Once again, we'll build equivalence classes of these objects. We define
+the unsigned tensors as:
+
+$$
+T^+ \equiv \{ t \in T : \forall x, y \in [0, \infty], T(x, y) \in [0, \infty \}
+$$
+
+We let $|(((a, b), (c, d)), ((e, f), (g, h)))| \equiv (((|a|, |b|), (|c|, |d|)), ((|e|, |f|), (|g|, |h|)))$.
+
+#### 8.6: Information
 
 
 A `Uuefp` and `Usefp` stand for uncompressed unsigned/signed EFP
@@ -224,7 +438,7 @@ A `Uuefp` and `Usefp` stand for uncompressed unsigned/signed EFP
 > type Usefp      = (String,Uuefp)
 
 
-Next, we define `Lft`, which stands for TODO
+Next, we define `Lft`, which stands for Linear fractional transformation
 
 > data Lft        = LftV Vector | LftM Matrix | LftT Tensor Integer
 >                 deriving (Eq, Show)
@@ -237,7 +451,8 @@ to be used on an expression, a tensor sandwhiched between two expressions.
 >                 ExpT Tensor Integer Expression Expression
 >                 deriving (Eq, Show)
 
-We define `Sefp` and `Uefp`  for signed/unsigned EFP
+We define `Sefp` and `Uefp`  for signed/unsigned exact floating point
+expresions.
 
 
 > data Sefp       = Spos Uefp | Sinf Uefp | Sneg Uefp | Szer Uefp
@@ -438,15 +653,6 @@ $$
 > --------------------------------------------------------------------------------
 > -- The Refinement Property
 > --------------------------------------------------------------------------------
-> sign :: Vector -> Integer
-> sign (a,b)
->     | a< 0 && b<=0          = -1
->     | a< 0 && b> 0          =  0
->     | a==0 && b< 0          = -1
->     | a==0 && b==0          =  0
->     | a==0 && b> 0          =  1
->     | a> 0 && b< 0          =  0
->     | a> 0 && b>=0          =  1
 > 
 > vrefine :: Vector -> Bool
 > vrefine v = sign v /= 0

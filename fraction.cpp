@@ -6,8 +6,8 @@
 #include <vector>
 
 using namespace std;
-using num = int;
 using ll = long long;
+using num = ll;
 
 struct Vec;
 struct Mat;
@@ -456,7 +456,7 @@ Tensor Mat::dot(const Tensor &t) const {
 const Tensor tadd(Mat(0, 0, 1, 0), Mat(1, 0, 0, 1));
 const Tensor tsub(Mat(0, 0, 1, 0), Mat(-1, 0, 0, 1));
 const Tensor tmul(Mat(1, 0, 0, 0), Mat(0, 0, 0, 1));
-const Tensor tdiv(Mat(0, 0, 1, 0), Mat(0, 1, 0, 1));
+const Tensor tdiv(Mat(0, 0, 1, 0), Mat(0, 1, 0, 0));
 
 
 OutFile &operator<<(OutFile &o, const LFT &lft) {
@@ -744,7 +744,15 @@ Sefp sem(const Expr *e, int i) {
     debugPrompt(__PRETTY_FUNCTION__);
     ScopedIndenter indent(cerr, __PRETTY_FUNCTION__);
     cerr << *e << "\n";
-    auto f = [e, l](int d) { return ab(l, e->tail(d), decision(d, l)); };
+    auto f = [e, l](int d) { 
+        ScopedIndenter indent(cerr, __PRETTY_FUNCTION__);
+        cerr << "- d:" << d << "\n";
+        cerr << "- e->tail(d):" << *e->tail(d) << "\n";
+        cerr << "- decision(d,l):" << decision(d,l) << "\n";
+        const Expr *out = ab(l, e->tail(d), decision(d, l));
+        cerr << "- ab(l, e->tail(d), decision(d, l)):" << *out << "\n";
+        return out;
+    };
     cerr << "- l: " << *l << "\n";
     cerr << "- isPos: " << ispos << "\n";
     cerr << "- LFT::dot(1, &ispos, l): " << *LFT::dot(1, &ispos, l) << "\n";
@@ -762,6 +770,8 @@ Sefp sem(const Expr *e, int i) {
         return Sefp(SefpType::Negative,
                     dem(Digits(0, 0), isinf.app(one(e)), i));
     } else {
+        const Expr *lapp = l->app(f);
+        cerr << "- l->app(f):" << *lapp << "\n";
         return sem(l->app(f), i);
     }
 }

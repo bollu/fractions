@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from sympy import *
 
 def S(name): return Symbol(name)
@@ -91,17 +92,23 @@ def vecmatmul_ref(v, m):
             out[i] += v[j]*m[j][i]
     return (out[0], out[1])
 
-s = Tensor("s"); t = Tensor("t");
-v = Vec("v"); w = Vec("w");
-m = Mat("m"); n = Mat("n");
+spos = ((1, 0), (0, 1))
+sinf = ((1, -1), (1, 1))
+sneg = ((0, 1), (-1, 0))
+szer = ((1, 1), (-1, 1))
 
-assert(mdotv(m, v) == vecmatmul_ref(v, m))
-assert(mdotm(m, n) == matmatmul_ref(n, m))
-assert(mdott(m, t) == (matmatmul_ref(t[0], m), matmatmul_ref(t[1], m)))
-assert(trightv(t, v) == (vecmatmul_ref(v, t[0]), vecmatmul_ref(v, t[1])))
-assert(trightm(t, m) == (matmatmul_ref(m, t[0]), matmatmul_ref(m, t[1])))
 
-def mapPair(f, x): (x0, x1) = x; return (f(x0), f(x1))
-assert(tleftv(t, v) == (vecmatmul_ref(v, trans(t)[0]), vecmatmul_ref(v, trans(t)[1])))
-assert(tleftm(t, m) == trans((matmatmul_ref(m, trans(t)[0]), matmatmul_ref(m, trans(t)[1]))))
-
+if __name__ == "__main__":
+    s = Tensor("s"); t = Tensor("t");
+    v = Vec("v"); w = Vec("w");
+    m = Mat("m"); n = Mat("n");
+    
+    assert(mdotv(m, v) == vecmatmul_ref(v, m))
+    assert(mdotm(m, n) == matmatmul_ref(n, m))
+    assert(mdott(m, t) == (matmatmul_ref(t[0], m), matmatmul_ref(t[1], m)))
+    assert(trightv(t, v) == (vecmatmul_ref(v, t[0]), vecmatmul_ref(v, t[1])))
+    assert(trightm(t, m) == (matmatmul_ref(m, t[0]), matmatmul_ref(m, t[1])))
+    
+    def mapPair(f, x): (x0, x1) = x; return (f(x0), f(x1))
+    assert(tleftv(t, v) == (vecmatmul_ref(v, trans(t)[0]), vecmatmul_ref(v, trans(t)[1])))
+    assert(tleftm(t, m) == trans((matmatmul_ref(m, trans(t)[0]), matmatmul_ref(m, trans(t)[1]))))
