@@ -1,18 +1,89 @@
 #include <assert.h>
-
+#include <stdio.h>
 #include <deque>
 #include <functional>
-#include <iostream>
 #include <utility>
 #include <vector>
 using namespace std;
 using num = int;
+using ll = long long;
 
 struct Vec;
 struct Mat;
 struct Tensor;
 struct Expr;
 struct LFT;
+
+struct OutFile {
+   public:
+    OutFile(const char *path) { f = fopen(path, "w"); }
+    OutFile(FILE *f) : f(f){};
+    ~OutFile() { fflush(f); }
+
+    void write(void *p) { fprintf(f, "%p", p); }
+    void write(const std::string &s) { fprintf(f, "%s", s.c_str()); }
+    void write(int i) { fprintf(f, "%d", i); }
+    void write(ll i) { fprintf(f, "%lld", i); }
+    void write(char c) { 
+        fputc(c, f);
+        if (c == '\n') {
+            for(int i = 0; i < indentLevel; ++i) {
+                for(int j = 0; j < 2; ++j) { fputc(' ', f); }
+                // fputc('|', f);
+            }
+        }
+    }
+    void write(const char *s) { while(*s != '\0') { write(*s++); } }
+
+    void indent() { indentLevel++; }
+    void dedent() { indentLevel--; assert(indentLevel >= 0); }
+
+   private:
+    ll indentLevel = 0;
+    FILE *f;
+};
+
+OutFile &operator<<(OutFile &f, const std::string &s) {
+    f.write(s.c_str());
+    return f;
+}
+OutFile &operator<<(OutFile &f, int i) {
+    f.write(i);
+    return f;
+}
+
+OutFile &operator<<(OutFile &f, ll i) {
+    f.write(i);
+    return f;
+}
+OutFile &operator<<(OutFile &f, const char *s) {
+    f.write(s);
+    return f;
+}
+
+OutFile &operator<<(OutFile &f, char c) {
+    f.write(c);
+    return f;
+}
+
+OutFile &operator<<(OutFile &f, void *p) {
+    f.write(p);
+    return f;
+}
+
+
+struct ScopedIndenter {
+    ScopedIndenter(OutFile &f, const char *preamble="") : f(f) { f.indent(); f << "\n" << preamble << "\n"; }
+    ~ScopedIndenter() { f.dedent(); }
+    OutFile &f;
+};
+
+static OutFile cerr(stderr);
+static OutFile cout(stdout);
+
+void debugPrompt(const char *name) {
+    cerr << "\n" << name << "[press key]>\n"; getchar();
+}
 
 enum class LFTType { Vec, Mat, Tensor };
 struct LFT {
@@ -46,16 +117,21 @@ struct LFT {
     virtual const Expr *app(std::function<const Expr *(int)> f) const = 0;
 
     static const LFT *dot(int i, const LFT *a, const LFT *b);
+
 };
 
+enum class ExprType {Vec='v', Mat='m', Tensor='t'};
 struct Expr {
+    const ExprType exprty;
+    Expr(ExprType exprty) : exprty(exprty) {};
     virtual const LFT *head() const = 0;
     virtual const Expr *tail(int i) const = 0;
 };
 
+
 struct Vec : public LFT, public Expr {
     int v0, v1;
-    Vec(int v0, int v1) : v0(v0), v1(v1), LFT(LFTType::Vec){};
+    Vec(int v0, int v1) : v0(v0), v1(v1), LFT(LFTType::Vec), Expr(ExprType::Vec){};
     int dot(Vec v) { return v0 * v.v0 + v1 * v.v1; }
     static LFTType getLFTType() { return LFTType::Vec; }
 
@@ -111,7 +187,18 @@ struct Vec : public LFT, public Expr {
 
 
     bool operator<(const Vec &other) const;
+
+
+    void print(OutFile &o) const {
+        o << "(" << v0 << " " << v1 << ")";
+    }
 };
+
+OutFile &operator << (OutFile &o, Vec v) {
+    v.print(o); return o;
+}
+
+
 
 struct Mat : public LFT {
     const int mat[2][2];
@@ -190,11 +277,20 @@ struct Mat : public LFT {
     }
 
     const Expr *cons(std::function<const Expr *(int)> f) const override;
+
+    void print(OutFile &o) const {
+        o << "(" << v0() << " " << v1() << ")";
+    }
 };
+
+OutFile &operator << (OutFile &o, Mat m) {
+    m.print(o); return o;
+}
 
 bool Vec::operator<(const Vec &other) const {
     return Mat(*this, other).determinant() < 0;
 }
+
 
 const Mat spos(1, 0, 0, 1);
 const Mat sinf(1, -1, 1, 1);
@@ -286,7 +382,17 @@ struct Tensor : public LFT {
     }
 
     const Expr *cons(std::function<const Expr *(int)> f) const override;
+
+    void print(OutFile &o) const {
+        o << "(" << m0() << " " << m1() << ")";
+    }
 };
+
+OutFile &operator << (OutFile &o, Tensor t) {
+    t.print(o); return o;
+}
+
+
 
 Tensor Mat::dot(const Tensor &t) const {
     return Tensor(this->dot(t.m0()), this->dot(t.m1()));
@@ -296,6 +402,23 @@ const Tensor tadd(Mat(0, 0, 1, 0), Mat(1, 0, 0, 1));
 const Tensor tsub(Mat(0, 0, 1, 0), Mat(-1, 0, 0, 1));
 const Tensor tmul(Mat(1, 0, 0, 0), Mat(0, 0, 0, 1));
 const Tensor tdiv(Mat(0, 0, 1, 0), Mat(0, 1, 0, 1));
+
+
+OutFile &operator <<(OutFile &o, const LFT &lft) {
+    if(lft.isa<Vec>()) {
+        lft.cast<Vec>()->print(o);
+    } else if (lft.isa<Mat>()) {
+        lft.cast<Mat>()->print(o);
+    } else {
+     assert(lft.isa<Tensor>());
+     lft.cast<Tensor>()->print(o);
+    }
+    return o;
+}
+
+OutFile &operator <<(OutFile &o, const Expr &e) {
+    return o << "Expr(" << (char)e.exprty << " " << (void *)e.head() << " = " << *e.head() << ")";
+}
 
 
 struct ExprThunk {
@@ -320,7 +443,7 @@ struct MatExpr : public Expr {
     const Mat m;
     const ExprThunk ethunk;
     // const Expr *e;
-    MatExpr(Mat m, ExprThunk ethunk) : m(m), ethunk(ethunk) {}
+    MatExpr(Mat m, ExprThunk ethunk) : m(m), ethunk(ethunk), Expr(ExprType::Mat) {}
 
     const LFT *head() const override { return new Mat(m); }
     const Expr *tail(int i) const override {
@@ -342,7 +465,7 @@ struct TensorExpr : public Expr {
 
     TensorExpr(Tensor t, int counter, const ExprThunk lthunk,
                const ExprThunk rthunk)
-        : t(t), counter(counter), lthunk(lthunk), rthunk(rthunk){};
+        : Expr(ExprType::Tensor), t(t), counter(counter), lthunk(lthunk), rthunk(rthunk){};
 
     const LFT *head() const override { return new Tensor(t); }
     const Expr *tail(int i) const override {
@@ -356,6 +479,7 @@ const Expr *Tensor::cons(std::function<const Expr *(int)> f) const {
             ExprThunk([f]() { return f(1); }),
             ExprThunk([f]() { return f(2); }));
 }
+
 
 // Page 185
 const LFT *LFT::dot(int i, const LFT *l, const LFT *r) {
@@ -425,7 +549,12 @@ const Expr *Mat::app(std::function<const Expr *(int)> g) const {
 }
 
 const Expr *Tensor::app(std::function<const Expr *(int)> g) const {
+    ScopedIndenter indent(cerr, __PRETTY_FUNCTION__); 
+    cerr << "- g(1): " << *g(1) << "\n";
+    cerr << "- g(2): " << *g(2) << "\n";
+
     const int c = g(1)->head()->branch();
+    cerr << "- c " << c << "\n";
     const auto h = [g, c](int i) {
         if (i <= c) {
             return g(1)->tail(i);
@@ -434,7 +563,10 @@ const Expr *Tensor::app(std::function<const Expr *(int)> g) const {
         }
     };
     const LFT *dotTwo = LFT::dot(2, this, g(2)->head());
+    cerr << "- dotTwo " << *dotTwo << "\n";
     const LFT *dotOne = LFT::dot(1, dotTwo, g(1)->head());
+    cerr << "- dotOne " << *dotOne << "\n";
+    cerr << "- " << (void *)dotOne->cons(h) << "\n";
     return dotOne->cons(h);
 }
 
@@ -540,6 +672,10 @@ std::function<T(int)> one(T t) {
 // Sign emission (11.1)
 Sefp sem(const Expr *e, int i) {
     const LFT *l = e->head();
+
+    debugPrompt(__PRETTY_FUNCTION__);
+    ScopedIndenter indent(cerr, __PRETTY_FUNCTION__); 
+    cerr << *e << "\n";
 
     auto f = [e, l](int d) { return ab(l, e->tail(d), decision(d, l)); };
 
@@ -765,7 +901,7 @@ const Expr *earctanszer() { assert(false && "unimplemented"); }
 
 int main() {
     for (int i = 0; i < 10; ++i) {
-        std::cout << "pi upto " << i << "places: " << eshow(epi(), 10);
+        cerr << "pi upto " << i << "places: " << eshow(epi(), 10);
     }
     return 0;
 }

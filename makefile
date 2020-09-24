@@ -1,4 +1,4 @@
-.PHONY: run-fraction
+.PHONY: run-fraction clean
 run-fraction: fraction
 	./fraction
 fraction: fraction.cpp
@@ -11,3 +11,5 @@ index.html: Reference.lhs makefile header
 kmett.html: Fractions.lhs makefile header
 	pandoc --standalone -f markdown+lhs Fractions.lhs -t html -o kmett.html --highlight-style=tango -H header
 
+clean:
+	rm ./fracton *.html
