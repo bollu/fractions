@@ -428,11 +428,284 @@ $$
 
 We let $|(((a, b), (c, d)), ((e, f), (g, h)))| \equiv (((|a|, |b|), (|c|, |d|)), ((|e|, |f|), (|g|, |h|)))$.
 
+
+#### Linear fractional transformations
+
+> data Lft        = LftV Vector | LftM Matrix | LftT Tensor Integer
+>                 deriving (Eq, Show)
+> 
+
+The extended rational numbers, mobius transformations, and 2D transformations
+will collectively be called as linear fractional transformations, which
+we will denote as $L \equiv V \cup M \cup T$.
+
 #### 8.6: Information
 
+Intuitively, we define a function called _information_, which maps a linear
+fractional transformation into the interval which it defines. The definition
+is that if we ever manage to get a $\bot$ (which is like $0/0$), then we lose,
+and our information content is the full line $\mathbb R^\infty$. Otherwise, it's
+going to be the image of whatever we can represent.
+- A vector $v$ represents the (closed) interval ${v}$
+- A matrix $m$ and a tensor $t$ represents the interval which is their image.
 
-A `Uuefp` and `Usefp` stand for uncompressed unsigned/signed EFP
+$$
+\begin{align*}
+&info : V \cup M \cup T \rightarrow \texttt{Interval}(\mathbb{Q}^\infty) \\
+&info(v) \equiv 
+\begin{cases} \mathbb{R}^\infty  & \text{ if } v = \bot \\
+{ v } & \text{otherwise} \\
+&info(m) \equiv 
+\begin{cases} \mathbb{R}^\infty  & \text{ if } \exists x \in [0, \infty], m(x) = \bot \\
+m([0, \infty]) & \text{otherwise} \\
+&info(t) \equiv 
+\begin{cases} \mathbb{R}^\infty  & \text{ if } \exists x, y \in [0, \infty], t(x, y) = \bot \\
+t([0, \infty], [0, \infty]) & \text{otherwise} \\
+\end{align*}
+$$
 
+#### Information, Refinement, and Unsignedness
+
+We can show that:
+1. Linear fractional transformation refines intervals
+2. Linear fractional transformation is unsigned
+
+is equivalent. More formally, we show that:
+
+$$
+\begin{align*}
+&v \in V^+ \iff \forall m \in M, info(m) \sqsubset info(m \circ v) \\
+&v \in V^+ \iff \forall t \in T, info(t) \sqsubset info(t \circ_1 v) \\
+&v \in V^+ \iff \forall t \in T, info(t) \sqsubset info(t \circ_2 v) \\
+&m \in M^+ \iff \forall m' \in M, info(m') \sqsubset info(m' \circ m) \\
+&m \in M^+ \iff \forall t \in T, info(t) \sqsubset info(t \circ_1 m) \\
+&m \in M^+ \iff \forall t \in T, info(t) \sqsubset info(t \circ_2 m) \\
+&t \in T^+ \iff \forall m \in M, info(m) \sqsubset info(m \circ t) \\
+\end{align*}
+$$
+
+Recall that we order intervals based on _refinement_. $[a, b] \sqsubset [c, d]$
+iff iff $a \leq c \leq d \leq b$. Alternatively say, $[a, b] \sqsubset [c, d]$
+iff $[a, b] \cap [c, d] = [c, d]$.
+
+##### Proof
+
+We show:
+
+$$
+v \in V^+ \iff \forall m \in M, info(m) \sqsubset info(m \circ v)
+$$
+
+The other proofs follow similarly.
+
+** (2): $\forall m \in M, info(m) \sqsubset info(m \circ v) \implies v \in V^+$ **
+
+- Pick $m = I = \begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix}$. Now, $info(m) = [0, \infty]$
+  and $info(m \circ v) = info(v)$. If we have that $info(m \circ v) = [0, \infty] \sqcup info(v) = \{ v \}$,
+  then we must have that $v \in [0, \infty]$, hence $v \in V^+$.
+
+** (1): $v \in V^+ \implies \forall m \in M, info(m) \sqsubset info(m \circ v)$  **
+
+- Let $v \in V^+$. By definition, we have that the rational number $v$ represents
+  is in $[0, \infty]$.
+- Consider an arbitrary $m \in M$. We can either have $info(m)$ blow up, or we can
+  have $info(m)$ be some reasonable subset of $[0, \infty]$.
+- In the blow up case, let $m \in M$ such that $\info(m) = \mathbb R^\infty$.
+  Then $info(m) = \mathbb R^\infty \sqcup info(M \circ V)$, because literally
+  any interval refines the blown up interval.
+- In the reasonable interval case, let $info(m) = m([0, \infty])$. See that
+  $m([0, \infty]) \sqcup m(\{v\})$. So, $info(m) \sqcup info(m \circ v)$.
+
+Qed.
+
+#### Implications of the proof
+
+Because of the proof, we say that all unsigned linear fractional transformations
+obey the _refinement property_.
+
+
+#### Computing `info`
+
+It is quite hard to build a computational function that approximates `info`
+well. We will show that $info = interval \circ list$.
+
+TODO: fill this in.
+
+#### General normal products
+
+#### Unbiased exact floating point: The unsigned case
+
+We make use of a redundant binary representation, where we get three digit
+matrices:
+
+$$
+D_0 \equiv \begin{bmatrix} 3 & 1 \\ 1 & 3 \end{bmatrix} \sim [1/3, 3] \\
+D_1 \equiv \begin{bmatrix} 2 & 1 \\ 0 & 1 \end{bmatrix} \sim [1, \infty] \\
+D_{-1} \eqvui \begin{bmatrix} 1 & 0 \\ 1 & 2 \end{bmatrix} \sim [0, 1] \\
+$$
+
+**Note:** In the interest of space, I've left out the golden ratio radix.
+
+
+#### Unbiased exact floating point: The signed case
+
+Here we make use of four sign matrices to represent the segments that one
+gets between $\pm 1$, $\pm \infty = \infty$ [we have compactified, both plus and
+minus infinity are the same thing], and $0$. So we get the segments:
+
+$$
+-\infty = \infty \leftrightarrow -1 \leftrightarrow 0 \leftrightarrow +1 \leftrightarrow +\infty=\infty
+$$
+
+and the coresponding four sign matrices:
+$$
+\begin{align*}
+&S_+ \simeq [0, \infty]; +1 \in [0, \infty] \\
+&S_- \simeq [\infty, 0]; -1 \in [\infty, 0] \\
+&S_0 \simeq [-1, 1]; 0 \in [-1, 1] \\
+&S_\infty \simeq [1, -1]; \infty \in [1, -1] 
+\end{align*}
+$$
+
+** TODO: ** Add picture!
+
+#### Biased exact floating point
+
+We can choose matrices so that addition and subtraction are very efficient.
+TODO: fill this up [if necessary]
+
+## Expression trees
+
+We denote an expression tree $L$ with $\{ E_i \}$ children as $L\{ E_i \}$.
+
+#### Matrix application
+
+We define $M[L\{ E_1, \dots, E_n \}] \equiv (M \circ L)\{E_1, \dots, E_n \}$.
+
+#### Reciprocal
+
+> instance Fractional Expression where
+>   recip = ExpM ((0,1),(1,0))
+>   (/) = ExpT (((0,0),(1,0)),((0,1),(0,0))) 0
+>   fromRational r = ExpV (numerator r,denominator r)
+
+#### Negation
+
+```hs
+negate = ExpM ((-1,0),(0,1))
+```
+
+#### Tensor Application
+
+The square bracket application of a tensor $T$ to two signed expression trees
+$K\{E_i\}$ and $L\{ F_j\}$ where $K, L$ are vectors or matrices is given by
+
+$$
+T[K\{E_i\}, L\{F_j\}] \equiv ((T \circ_2 L) \circ_1 K)\{ E_i, F_j \}$
+$$
+
+#### Numeric instances
+
+We can perform addition, subtraction, multiplication, division by using
+tensor expressions given by equations (8.7), (8.8), (8.9), (8.10).
+
+> instance Num Expression where
+>   (+) = ExpT (((0,0),(1,0)),((1,0),(0,1))) 0
+>   (-) = ExpT (((0,0),(1,0)),((-1,0),(0,1))) 0
+>   (*) = ExpT (((1,0),(0,0)),((0,0),(0,1))) 0
+>   negate = ExpM ((-1,0),(0,1))
+>   fromInteger n = ExpV (n,1)
+
+
+#### Elementary functions
+
+We can use the taylor series of a function to derive continued fraction
+representations. We will need the _backward theorem_ to justify some of the
+manipulations needed when building matrices for the taylor series.
+
+TODO: transcribe this section (pages 138 - 139).
+
+This gives us formulae for all the trig identities
+
+#### Square root
+TODO
+
+#### Loop nodes, extracting information from a loop node.
+TODO
+
+#### Logarithm
+TODO
+
+#### Exponential
+TODO
+
+#### Pi
+TODO
+
+## Normalization algorithms
+
+Given an expression tree $E = L\{E_1, \dots, E_n\}$ we want to **emit** a matrix $M$
+such that $info(L) \subseteq info(M)$. That is, the matrix $M$ refines $L$.
+In such a case, we can write $M^\dagger \circ L \in L^+$ [TODO: why do we need the $\dagger$?],
+in which case, we emit according to the rule $E \mapsto M \{ M^\dagger [E] \}$,
+which expands out out $E \mapsto M \{ (M^\dagger \circ L)\{E_1, \dots, E_n\} \}$.
+
+For a signed expression tree, we first need to emit a sign matrix, which
+leaves an unsigned expression tree behind. For an unsigned expression tree,
+we need to emit digit matrices to get the data digit-by-digit.
+
+#### Absorption
+
+**Matrices**:
+
+$$
+\begin{align*}
+&M\{V^+\} \mapsto (M \circ V^+) \\
+&M\{N^+\{E\}\} \mapsto (M \circ N^+)\{E \} \\
+&M\{T^+\{E_1, E_2\}\} \mapsto (M \circ T^+)\{E_1, E_2 \} \\
+\end{align*}
+$$
+
+**Tensors**:
+
+$$
+\begin{align*}
+&T\{V^+, W^+\} \mapsto (T \circ_1 V^+ \circ W^+) \\
+&\dots \text{TODO: fill in the obvious} \\
+$$
+
+## Information flow analysis
+
+The advantage of the exact floating point representation is that it gives us
+a way to measure information content using a metric $d_P$ [in equation (3.5)].
+In particular, we can show $d_p(x, y) = |S_0(x) - S_0(y)|$, for all $x, y \in [0, \infty]$.
+
+TODO: write more about this most/least
+
+
+## Digit exchange: assimilating tensors with other tensors
+
+We can always add in a $D D^\dagger = I$ in between any two tensors to get
+a $D$ and a $D^\dagger$ thereby letting us 
+
+## Exchange
+
+TODO
+
+## Strategy
+
+TODO
+
+## Straightforward reduction rules
+
+TODO
+
+## Scale invariance
+
+TODO
+
+
+A `Uuefp` and `Usefp` stand for uncompressed unsigned/signed EFP [exact floating point]
 
 > type Uuefp      = [Integer]
 > type Usefp      = (String,Uuefp)
@@ -440,9 +713,6 @@ A `Uuefp` and `Usefp` stand for uncompressed unsigned/signed EFP
 
 Next, we define `Lft`, which stands for Linear fractional transformation
 
-> data Lft        = LftV Vector | LftM Matrix | LftT Tensor Integer
->                 deriving (Eq, Show)
-> 
 
 Then we define an `Expression` type which carries a vector, a matrix
 to be used on an expression, a tensor sandwhiched between two expressions.
@@ -478,10 +748,6 @@ $$
 >   negate = ExpM ((-1,0),(0,1))
 >   fromInteger n = ExpV (n,1)
 > 
-> instance Fractional Expression where
->   recip = ExpM ((0,1),(1,0))
->   (/) = ExpT (((0,0),(1,0)),((0,1),(0,0))) 0
->   fromRational r = ExpV (numerator r,denominator r)
 > 
 > instance Enum Expression where
 >   succ = ExpM ((1,0),(1,1))
