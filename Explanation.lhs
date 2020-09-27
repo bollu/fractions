@@ -527,9 +527,28 @@ obey the _refinement property_.
 #### Computing `info`
 
 It is quite hard to build a computational function that approximates `info`
-well. We will show that $info = interval \circ list$.
+well. We begin with a mess of definitions:
 
-TODO: fill this in.
+- $v \asymp w \equiv \exists r < 0, v = rw$. This is ir-reflexive, symmetric,
+  and non-transitive.
+- $v \preceq w \equiv det(v, w) \leq 0$ [I have no intuition for this either]. This
+  is at least a partial order, because swapping columns of a matrix flips the sign.
+- $bottom(v_0, \dots, v_{n-1}) = 
+  \begin{cases}
+  \texttt{true} & \text{if } \exists i, j v_i \asymp v_j \\
+  \end{cases}\text{otherwise}$
+- $\min(v_0, \dots v_{n-1})$ is the $v_i$ with the smallest index $i$ such that
+  $\forall j, v_i \preceq v_j$. So it is the smallest vector, breaking ties by using the 
+  smallest index.
+- $\max(v_0, \dots v_{n-1})$ is the $v_i$ with the smallest index $i$ such that
+  $\forall j, v_j \preceq v_i$. So it is the largest vector, breaking ties by using the 
+  smallest index.
+- $interval(X) = \begin{cases} \mathbb R^\infty & \text{if } bottom(X) = \texttt{true} &
+   [\min(X), \max(X)] & bottom(X) = \texttt{false}$
+- $list(v) = (v); list(m) = (m_0, m_1); list(t) = t_{00}, t_{01}, t_{10}, t_{11}$.
+
+We will show that $info = interval \circ list$.
+
 
 #### General normal products
 
@@ -564,6 +583,17 @@ $$
 &S_- \simeq [\infty, 0]; -1 \in [\infty, 0] \\
 &S_0 \simeq [-1, 1]; 0 \in [-1, 1] \\
 &S_\infty \simeq [1, -1]; \infty \in [1, -1] 
+\end{align*}
+$$
+
+The formulate is:
+
+$$
+\begin{align*}
+&S_+(x) = x \simeq [0, \infty] \\
+&S_-(x) = -1/x \simeq [infty, 0] \\
+&S_0(x) = (x-1)/(x+1) \simeq [-1, 1]\\
+&S_\infty(x) = (1+x)/(1-x) \simeq [1, -1] \\
 \end{align*}
 $$
 
@@ -677,8 +707,27 @@ $$
 ## Information flow analysis
 
 The advantage of the exact floating point representation is that it gives us
-a way to measure information content using a metric $d_P$ [in equation (3.5)].
+a way to measure information content using a metric $d_p(x, y) = 2|x - y|/((1+|x|)(1+|y|))$.
 In particular, we can show $d_p(x, y) = |S_0(x) - S_0(y)|$, for all $x, y \in [0, \infty]$.
+Thus, we can measure the information by applying the $S_0$ matrix and pulling
+out information.
+
+
+#### Proof
+
+Recall that $S_0(x) = (x-1)/(x+1)$ since it represents the interval $[-1, 1]$.
+
+$$
+\begin{align*}
+&|S_0(x) - S_0(y)| \\
+&= |\frac{x-1}{x+1} - \frac{y-1}{y+1}|  \\
+&= |\frac{(x-1)(y+1)- (y-1)(x+1)}{(x+1)(y+1)}|  \\
+&= |\frac{xy +x - y - 1 - [yx + y -x -1]}{(x+1)(y+1)}|  \\
+&= |\frac{2x - 2y}{(x+1)(y+1)}|  \\
+&= |\frac{2(x - y)}{(x+1)(y+1)}|  \\
+&= d_p(x, y) \text{ when } x = |x|, y = |y|
+\end{align*}
+$$
 
 TODO: write more about this most/least
 
@@ -702,7 +751,33 @@ TODO
 
 ## Scale invariance
 
-TODO
+We only need to rescale by `2` since we are using digit `2` matrices. We consider
+the theorem:
+
+#### Theorem: Prime factors of $m \circ v$:
+
+If $m$ is a matrix, $v$ is a vector, then every prime factor of the
+integer represented by $m \circ v \in V$ is a prime factor of $det(m)$
+or of $v$. The intuition is that $v$ already represents a number, and 
+$det(m)$ can scale $v$.
+
+##### Proof
+Let $w \in V$, and $m \circ v = pW$ for some prime $p$. note that
+
+$$
+\begin{align*}
+&m^\dagger \circ (m \circ v) = (m^\dagger \circ m) \circ v = det(m) v \\
+&m^\dagger \circ (m \circ v) = m^\dagger \circ (kw) = k (m^\dagger \circ w) \\
+k (m^\dagger \circ w) = det(m) v
+\end{align*}
+
+Thus we must have that $k$ divides $\det(m) v$, and thus $k$ divides either
+$\det(m)$ or $k$ divides $v$.
+
+#### Corollary: if $m$ is a matrix and $l$ is a linear fractional transformation,
+     then every prime factor of $m \circ l$ is a prime factor of $\det(m)$ or $l$.
+
+
 
 
 A `Uuefp` and `Usefp` stand for uncompressed unsigned/signed EFP [exact floating point]

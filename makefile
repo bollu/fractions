@@ -1,4 +1,7 @@
-.PHONY: run-fraction clean
+.PHONY: run-fraction run-gosper clean
+
+gosper: gosper.cpp
+	g++ gosper.cpp -o gosper -std=c++14 -g -O0 -fsanitize=address -fsanitize=undefined -static-libasan
 
 run-fraction: fraction
 	./fraction
