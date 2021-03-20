@@ -1,0 +1,815 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title></title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <style type="text/css">
+div.sourceCode { overflow-x: auto; }
+table.sourceCode, tr.sourceCode, td.lineNumbers, td.sourceCode {
+  margin: 0; padding: 0; vertical-align: baseline; border: none; }
+table.sourceCode { width: 100%; line-height: 100%; background-color: #f8f8f8; }
+td.lineNumbers { text-align: right; padding-right: 4px; padding-left: 4px; color: #aaaaaa; border-right: 1px solid #aaaaaa; }
+td.sourceCode { padding-left: 5px; }
+pre, code { background-color: #f8f8f8; }
+code > span.kw { color: #204a87; font-weight: bold; } /* Keyword */
+code > span.dt { color: #204a87; } /* DataType */
+code > span.dv { color: #0000cf; } /* DecVal */
+code > span.bn { color: #0000cf; } /* BaseN */
+code > span.fl { color: #0000cf; } /* Float */
+code > span.ch { color: #4e9a06; } /* Char */
+code > span.st { color: #4e9a06; } /* String */
+code > span.co { color: #8f5902; font-style: italic; } /* Comment */
+code > span.ot { color: #8f5902; } /* Other */
+code > span.al { color: #ef2929; } /* Alert */
+code > span.fu { color: #000000; } /* Function */
+code > span.er { color: #a40000; font-weight: bold; } /* Error */
+code > span.wa { color: #8f5902; font-weight: bold; font-style: italic; } /* Warning */
+code > span.cn { color: #000000; } /* Constant */
+code > span.sc { color: #000000; } /* SpecialChar */
+code > span.vs { color: #4e9a06; } /* VerbatimString */
+code > span.ss { color: #4e9a06; } /* SpecialString */
+code > span.im { } /* Import */
+code > span.va { color: #000000; } /* Variable */
+code > span.cf { color: #204a87; font-weight: bold; } /* ControlFlow */
+code > span.op { color: #ce5c00; font-weight: bold; } /* Operator */
+code > span.pp { color: #8f5902; font-style: italic; } /* Preprocessor */
+code > span.ex { } /* Extension */
+code > span.at { color: #c4a000; } /* Attribute */
+code > span.do { color: #8f5902; font-weight: bold; font-style: italic; } /* Documentation */
+code > span.an { color: #8f5902; font-weight: bold; font-style: italic; } /* Annotation */
+code > span.cv { color: #8f5902; font-weight: bold; font-style: italic; } /* CommentVar */
+code > span.in { color: #8f5902; font-weight: bold; font-style: italic; } /* Information */
+  </style>
+  <script src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
+  <style>
+  body {font-size: 1.8em; line-height: 1.5em; padding: 20px; font-family: sans-serif; }
+  h1, h2, h3, h4, h5 { line-height: 0.9em; }
+  </style>
+</head>
+<body>
+<h1 id="an-exposition-of-kmettfractions-how-to-compute-pi-to-1000-places">An exposition of <code>kmett/fractions</code>: how to compute pi to 1000 places</h1>
+<p>At the end of this post, we'll know how to compute <code>pi</code> to a thousand places:</p>
+<pre><code>*Reference&gt; eshow pi 1000
+&quot;0.3141592653589793238462643383279502884197169399375
+1058209749445923078164062862089986280348253421170679
+8214808651328230664709384460955058223172535940812848
+1117450284102701938521105559644622948954930381964428
+8109756659334461284756482337867831652712019091456485
+6692346034861045432664821339360726024914127e1&quot;</code></pre>
+<p>which is indeed correct, on comparison with <a href="http://www.math.com/tables/constants/pi.htm"><code>math.com</code>'s pi digits list</a>. Let's understand what <code>eshow</code> is, and what <code>pi</code> is. Let's begin!</p>
+<h2 id="spelunking-the-codebase">Spelunking the codebase</h2>
+<p>We begin with the usual incantations:</p>
+<div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="co">-- Haskell implementation of exact real arithmetic using</span>
+<span class="co">-- Linear Fractional Transformations.</span>
+<span class="co">-- Original version by Peter Potts, circa 1998.</span>
+<span class="co">-- Updated by Edward Kmett to Haskell 98 in 2015 </span>
+<span class="kw">module</span> <span class="dt">Reference</span> <span class="kw">where</span>
+<span class="kw">import </span><span class="dt">Data.Char</span>
+<span class="kw">import </span><span class="dt">Data.Ratio</span></code></pre></div>
+<p>Now we take a peek at <code>eshow</code>:</p>
+<div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="fu">---------------------------</span>
+<span class="co">-- Decimal Output Function</span>
+<span class="fu">---------------------------</span>
+<span class="ot">eshow ::</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> [<span class="dt">Char</span>]
+eshow e i <span class="fu">=</span> mshow (stom (sem e) i)
+
+<span class="ot">mshow ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> [<span class="dt">Char</span>]
+mshow m
+    <span class="fu">|</span> d<span class="fu">==</span><span class="dv">0</span> <span class="fu">&amp;&amp;</span> q<span class="fu">==</span><span class="dv">1</span> <span class="fu">=</span> show p
+    <span class="fu">|</span> d<span class="fu">==</span><span class="dv">0</span> <span class="fu">&amp;&amp;</span> q<span class="fu">/=</span><span class="dv">1</span> <span class="fu">=</span> show p <span class="fu">++</span> <span class="st">&quot;/&quot;</span> <span class="fu">++</span> show q
+    <span class="fu">|</span> d<span class="fu">/=</span><span class="dv">0</span>         <span class="fu">=</span> sshow (scientific m <span class="dv">0</span>)
+    <span class="kw">where</span>
+    d <span class="fu">=</span> determinant m
+    (p,q)
+        <span class="fu">|</span> b <span class="fu">&lt;</span> <span class="dv">0</span>     <span class="fu">=</span> (<span class="fu">-</span>a,<span class="fu">-</span>b)
+        <span class="fu">|</span> otherwise <span class="fu">=</span> (a,b)
+    (a,b) <span class="fu">=</span> vscale (fst m)</code></pre></div>
+<p>Right, we have no idea what <code>stom</code>, <code>sem</code> is, or why we suddenly have matrices involved! So here's the high level idea:</p>
+<ul>
+<li><code>pi</code> is an irrational number.</li>
+<li><code>pi</code> has a continued fraction expansion.</li>
+<li>We can truncate the continued fraction expansion.</li>
+<li>Continued fractions have tests, which allows us to find out how many digits are correct.</li>
+<li>So, we take <code>pi</code>, crunch the value of its continued fraction expansion to as many digits as we need till we know that we have those many correct digits.</li>
+<li>The math for all of this is aided by thinking about a fraction <code>p/q</code> as a vector <code>[p q]</code> and transformations of fractions as matrix multiplications.</li>
+<li>If the above didn't make sense, it's OK. Just repeat the mantra &quot;continued fractions are awesome&quot; and dive in! All shall be explained.</li>
+</ul>
+<h2 id="the-farey-diagram">The Farey diagram</h2>
+<p><img src="docs/farey-diagram.png"/></p>
+<p>The beautiful diagram above is known as a <a href="https://en.wikipedia.org/wiki/Farey_sequence#Sequence_length_and_index_of_a_fraction">Farey diagram</a>.</p>
+<p>The vertices of the triangles in the Farey diagram are labeled with fractions <code>a/b</code>, including the fraction <code>1/0</code> [at the left] for infinity. We begin by first labelling the vertices of the big triangle <code>1/0</code> , <code>0/1</code>, and <code>1/1</code>. Then one inserts labels for successively smaller triangles by the rule that, if the labels at the two ends of the long edge of a triangle are <code>a/b</code> and <code>c/d</code> , then the label on the third vertex of the triangle is <code>(a+c)/(b+d)</code>.</p>
+<p><img src="docs/mediant-rule.png"/> This fraction <code>(a+c)/(b+d)</code> is called the <strong>mediant</strong> of <code>a/b</code> and <code>c/d</code>.</p>
+<p>A reasonable question at this point is: &quot;Why fractions?&quot;</p>
+<h2 id="continued-fractions">Continued fractions</h2>
+<p>Consider the number <code>7/16</code>. We can write it as a &quot;continued fraction&quot;:</p>
+<p><span class="math display">\[
+\begin{align*}
+&amp;\frac{7}{16} =  0 + \frac{1}{2 + \frac{1}{3 + \frac{1}{2}}} \\
+&amp;\frac{7}{16} \text{ is denoted as } [2, 3, 2] \\
+&amp;\text{convergent } 1 = \frac{1}{2} \\
+&amp;\text{convergent } 2 = \frac{1}{2 + \frac{1}{3}}  = \frac{1}{\frac{7}{3}} = \frac{3}{7} \\
+&amp;\text{convergent } 3 = \frac{1}{2 + \frac{1}{3 + \frac{1}{2}}} 
+ = \frac{1}{2 + \frac{1}{7}{2}} 
+ = \frac{1}{2 + \frac{2}{7}}
+ = \frac{1}{\frac{16}{7}}
+ = \frac{7}{16}
+\end{align*}
+\]</span></p>
+<p>We have our convergents <span class="math inline">\(1/2\)</span>, <span class="math inline">\(3/7\)</span>, <span class="math inline">\(7/16\)</span>, the sequence of numbers <span class="math inline">\([2, 3, 2]\)</span> which are two representations of the continued fraction expansion. We combine the these into very suggestive notation below as a fan of triangles, along with <span class="math inline">\(1/0\)</span> and <span class="math inline">\(0/1\)</span> which we have pulled out of thin air.</p>
+<p><img src="docs/seven-by-sixteen-farey-strip.png"/></p>
+<p>The above notation is called as Farey strip. We will come to see that it has very nice properties. Let us take two adjacent numbers in the Farey strip, <span class="math inline">\(1/2\)</span> and <span class="math inline">\(3/7\)</span>. The number that is towrads the right, <span class="math inline">\(3/7\)</span>, has an arc of <span class="math inline">\(2\)</span> labeled above it. Now, the next number <span class="math inline">\((7/16)\)</span> is calculated using a rule: <span class="math inline">\(1/2 \oplus_2 3/7 = (1 + 2 \cdot 3)/(2 + 2 \cdot 7) = 7/16\)</span>. More abstractly, given any two fractions <span class="math inline">\(a/b\)</span>, <span class="math inline">\(c/d\)</span>, and a number <span class="math inline">\(n\)</span>, we build the fraction <span class="math inline">\(a/b\oplus_n c/d = (a+n \cdot c)/(b+ n \cdot d)\)</span>.</p>
+<p>We can check that the entre farey strip is self-consistent with respect to this operation of <span class="math inline">\(\oplus\)</span>:</p>
+<p><img src="docs/seven-by-sixteen-farey-strip.png"/></p>
+<ul>
+<li><span class="math inline">\(1/0 \oplus_2 0/1 = (1 + 2 \cdot0)(0 + 2\cdot1) = 1/2\)</span></li>
+<li><span class="math inline">\(0/1 \oplus_3 1/2 = (0 + 3 \cdot1)(1 + 3\cdot2) = 3/7\)</span>.</li>
+<li><span class="math inline">\(1/2 \oplus_2 3/7 = (1 + 2 \cdot 3)/(2 + 2 \cdot 7) = 7/16\)</span> as verified previously.</li>
+</ul>
+<h3 id="building-the-farey-strip">Building the Farey Strip</h3>
+<ul>
+<li>Let's start from <span class="math inline">\(1/0 \rightarrow 2 \curvearrowright 0/1\)</span>. We need to start with <span class="math inline">\(1/0, 0/1\)</span> as god-given. The <span class="math inline">\(2\)</span> comes from the continued fraction of <span class="math inline">\(7/16 = 1/(\mathbf{2} + \dots)\)</span>:</li>
+</ul>
+<p><img src="docs/seven-by-sixteen-farey-strip-first-part.png"/></p>
+<ul>
+<li>We compute the next number as <span class="math inline">\((1 + 2 \cdot 0)/(0 + 2 \cdot 1) = 1/2\)</span>. This was our convergent 1 of <span class="math inline">\(7/16\)</span>. We write <span class="math inline">\(1/2\)</span> next to the <span class="math inline">\(0/1\)</span>. We then place next number in the continued fraction expansion after <span class="math inline">\(2\)</span>, which is <span class="math inline">\(7/16 = 1/(2 + 1/(\mathbf{3} + \dots))\)</span>, so the number <span class="math inline">\((3)\)</span>, on the arc below to <span class="math inline">\(1/2\)</span>.</li>
+</ul>
+<p><img src="docs/seven-by-sixteen-farey-strip-second-part.png"/></p>
+<ul>
+<li>Let's continue with the same process. We have to compute <span class="math inline">\(0/1 \rightarrow 3\curvearrowright 1/2\)</span>. By the previous process, this is going to be <span class="math inline">\(( 0 + 3 \cdot 1)/(1 + 3 \cdot 2) = 3/7\)</span></li>
+</ul>
+<p><img src="docs/seven-by-sixteen-farey-strip.png"/></p>
+<ul>
+<li>The numbers <code>2, 3, 2</code> on the arcs are the same numbers that show up on the continued fraction expansion.</li>
+<li>How do we compute the intermediate fractions <code>1/2</code>, <code>3/7</code>, <code>7/16</code> according to this notation?</li>
+</ul>
+<h2 id="infinite-continued-fractions">Infinite continued fractions</h2>
+<p>It turns out that <em>all</em> real numbers posess such expressions in terms of continued fractions. For example, the continued fraction for <code>sqrt(2)</code> is:</p>
+<p><span class="math display">\[
+\sqrt 2 = 1 + \frac{1}{1 + \frac{1}{1 + \frac{1}{1 + \dots}}}
+\]</span></p>
+<p>We can truncate the infinite continued fraction as:</p>
+<p><span class="math display">\[
+\begin{align*}
+&amp;\text{convergent } 0 = 1.\dots \\
+&amp;\text{convergent } 1 = 1 + \frac{1}{1} = 2.\dots \\
+&amp;\text{convergent } 2 = 1 + \frac{1}{1 + \frac{1}{1}} = 1 + 1/2 = 3/2  = 1.500000\dots \\
+&amp;\text{convergent } 3 = 1 + \frac{1}{1 + \frac{1}{1 + \frac{1}{1}}} 
+     = 1 + \frac{1}{1 + \frac{1}{1 + 1/2}}
+     = 1 + \frac{1}{1 + 3/2}
+     = 1 + \frac{1}{5/2}
+     = 1 + \frac{2}{5}
+     = 7/5 = 1.40000000\dots
+\end{align*}
+\]</span></p>
+<p>Now that we have the hang of computing these, let's look at a table of their values:</p>
+<p><span class="math display">\[
+\begin{align*}
+\sqrt 2 &amp;= 1.41421356\dots \\
+1/1     &amp;= 1.00000000\dots \\
+3/2     &amp;= \mathbf{1.}5000000\dots  \\   
+7/5     &amp;= \mathbf{1.}4000000\dots  \\   
+17/12   &amp;= \mathbf{1.4}166666\dots  \\   
+41/29   &amp;= \mathbf{1.41}37931\dots  \\   
+99/70   &amp;= \mathbf{1.41}42857\dots  \\   
+239/169 &amp;= \mathbf{1.4142}011\dots  \\   
+577/408 &amp;= \mathbf{1.4142}156\dots  \\   
+\end{align*}
+\]</span></p>
+<p>There's a striking property: once an initial string of digits occurs twice in succession, then this string is unchanged forever after. This is because for any two successive convergents, all subsequent convergents lie between these two since the convergents occur along a zigzag path in the Farey diagram.</p>
+<h2 id="reading-the-code">Reading the code</h2>
+<p>First, we define a vector as two integers, a matrix as two vectors, a tensor as two matrices.</p>
+<div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Vector</span>     <span class="fu">=</span> (<span class="dt">Integer</span>, <span class="dt">Integer</span>)
+<span class="kw">type</span> <span class="dt">Matrix</span>     <span class="fu">=</span> (<span class="dt">Vector</span>,<span class="dt">Vector</span>)
+<span class="kw">type</span> <span class="dt">Tensor</span>     <span class="fu">=</span> (<span class="dt">Matrix</span>,<span class="dt">Matrix</span>)</code></pre></div>
+<p>A <code>Uuefp</code> and <code>Usefp</code> stand for uncompressed unsigned/signed EFP</p>
+<div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Uuefp</span>      <span class="fu">=</span> [<span class="dt">Integer</span>]
+<span class="kw">type</span> <span class="dt">Usefp</span>      <span class="fu">=</span> (<span class="dt">String</span>,<span class="dt">Uuefp</span>)</code></pre></div>
+<p>Next, we define <code>Lft</code>, which stands for TODO</p>
+<div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">Lft</span>        <span class="fu">=</span> <span class="dt">LftV</span> <span class="dt">Vector</span> <span class="fu">|</span> <span class="dt">LftM</span> <span class="dt">Matrix</span> <span class="fu">|</span> <span class="dt">LftT</span> <span class="dt">Tensor</span> <span class="dt">Integer</span>
+                <span class="kw">deriving</span> (<span class="dt">Eq</span>, <span class="dt">Show</span>)</code></pre></div>
+<p>Then we define an <code>Expression</code> type which carries a vector, a matrix to be used on an expression, a tensor sandwhiched between two expressions.</p>
+<div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">Expression</span> <span class="fu">=</span> <span class="dt">ExpV</span> <span class="dt">Vector</span> <span class="fu">|</span> <span class="dt">ExpM</span> <span class="dt">Matrix</span> <span class="dt">Expression</span> <span class="fu">|</span>
+                <span class="dt">ExpT</span> <span class="dt">Tensor</span> <span class="dt">Integer</span> <span class="dt">Expression</span> <span class="dt">Expression</span>
+                <span class="kw">deriving</span> (<span class="dt">Eq</span>, <span class="dt">Show</span>)</code></pre></div>
+<p>We define <code>Sefp</code> and <code>Uefp</code> for signed/unsigned EFP</p>
+<div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">data</span> <span class="dt">Sefp</span>       <span class="fu">=</span> <span class="dt">Spos</span> <span class="dt">Uefp</span> <span class="fu">|</span> <span class="dt">Sinf</span> <span class="dt">Uefp</span> <span class="fu">|</span> <span class="dt">Sneg</span> <span class="dt">Uefp</span> <span class="fu">|</span> <span class="dt">Szer</span> <span class="dt">Uefp</span>
+                <span class="kw">deriving</span> (<span class="dt">Eq</span>, <span class="dt">Show</span>)
+<span class="kw">data</span> <span class="dt">Uefp</span>       <span class="fu">=</span> <span class="dt">Dneg</span> <span class="dt">Uefp</span> <span class="fu">|</span> <span class="dt">Dzer</span> <span class="dt">Uefp</span> <span class="fu">|</span> <span class="dt">Dpos</span> <span class="dt">Uefp</span> <span class="fu">|</span> <span class="dt">Term</span> <span class="dt">Vector</span>
+                <span class="kw">deriving</span> (<span class="dt">Eq</span>, <span class="dt">Show</span>)</code></pre></div>
+<p><code>Expression</code> can be given a <code>Num</code> instance by defining the operators: <span class="math display">\[
+\begin{align*}
+&amp;+ \equiv \left (\begin{bmatrix} 0 &amp; 0 \\ 1 &amp; 0 \end{bmatrix}, \begin{bmatrix} 1 &amp; 0 \\ 0 &amp; 1 \end{bmatrix} \right) \\
+&amp;- \equiv \left (\begin{bmatrix} 0 &amp; 0 \\ 1 &amp; 0 \end{bmatrix}, \begin{bmatrix} -1 &amp; 0 \\ 0 &amp; 1 \end{bmatrix} \right) \\
+&amp;* \equiv \left (\begin{bmatrix} 1 &amp; 0 \\ 0 &amp; 0 \end{bmatrix}, \begin{bmatrix} 0 &amp; 0 \\ 0 &amp; 1 \end{bmatrix} \right) \\
+\end{align*}
+\]</span></p>
+<div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">instance</span> <span class="dt">Num</span> <span class="dt">Expression</span> <span class="kw">where</span>
+  (<span class="fu">+</span>) <span class="fu">=</span> <span class="dt">ExpT</span> (((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>))) <span class="dv">0</span>
+  (<span class="fu">-</span>) <span class="fu">=</span> <span class="dt">ExpT</span> (((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="fu">-</span><span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>))) <span class="dv">0</span>
+  (<span class="fu">*</span>) <span class="fu">=</span> <span class="dt">ExpT</span> (((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">0</span>)),((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>))) <span class="dv">0</span>
+  negate <span class="fu">=</span> <span class="dt">ExpM</span> ((<span class="fu">-</span><span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>))
+  fromInteger n <span class="fu">=</span> <span class="dt">ExpV</span> (n,<span class="dv">1</span>)
+
+<span class="kw">instance</span> <span class="dt">Fractional</span> <span class="dt">Expression</span> <span class="kw">where</span>
+  recip <span class="fu">=</span> <span class="dt">ExpM</span> ((<span class="dv">0</span>,<span class="dv">1</span>),(<span class="dv">1</span>,<span class="dv">0</span>))
+  (<span class="fu">/</span>) <span class="fu">=</span> <span class="dt">ExpT</span> (((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="dv">0</span>,<span class="dv">1</span>),(<span class="dv">0</span>,<span class="dv">0</span>))) <span class="dv">0</span>
+  fromRational r <span class="fu">=</span> <span class="dt">ExpV</span> (numerator r,denominator r)
+
+<span class="kw">instance</span> <span class="dt">Enum</span> <span class="dt">Expression</span> <span class="kw">where</span>
+  succ <span class="fu">=</span> <span class="dt">ExpM</span> ((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">1</span>))
+  pred <span class="fu">=</span> <span class="dt">ExpM</span> ((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="fu">-</span><span class="dv">1</span>,<span class="dv">1</span>))
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Basic Functions</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">one ::</span> a <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> a
+one f <span class="dv">1</span> <span class="fu">=</span> f
+
+<span class="ot">identity ::</span> <span class="dt">Matrix</span>
+identity <span class="fu">=</span> ((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>))
+
+<span class="ot">trans ::</span> ((t1,t2),(t3,t4)) <span class="ot">-&gt;</span> ((t1,t3),(t2,t4))
+trans ((a,b),(c,d)) <span class="fu">=</span> ((a,c),(b,d))
+
+<span class="ot">determinant ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span>
+determinant ((a,b),(c,d))   <span class="fu">=</span> a <span class="fu">*</span> d <span class="fu">-</span> b <span class="fu">*</span> c
+
+<span class="ot">inverse ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>
+inverse ((a,b),(c,d)) <span class="fu">=</span> mscale ((d,<span class="fu">-</span>b),(<span class="fu">-</span>c,a))
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Binary Scaling Functions</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">vscale ::</span> <span class="dt">Vector</span> <span class="ot">-&gt;</span> <span class="dt">Vector</span>
+vscale (a,b)
+    <span class="fu">|</span> ar <span class="fu">&amp;&amp;</span> br  <span class="fu">=</span> vscale (div a <span class="dv">2</span>, div b <span class="dv">2</span>)
+    <span class="fu">|</span> otherwise <span class="fu">=</span> (a,b)
+    <span class="kw">where</span>
+    ar <span class="fu">=</span> (mod a <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    br <span class="fu">=</span> (mod b <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+
+<span class="ot">mscale ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>
+mscale ((a,b),(c,d))
+    <span class="fu">|</span> ar <span class="fu">&amp;&amp;</span> br <span class="fu">&amp;&amp;</span> cr <span class="fu">&amp;&amp;</span> dr  <span class="fu">=</span> mscale ((div a <span class="dv">2</span>, div b <span class="dv">2</span>), (div c <span class="dv">2</span>, div d <span class="dv">2</span>))
+    <span class="fu">|</span> otherwise             <span class="fu">=</span> ((a,b),(c,d))
+    <span class="kw">where</span>
+    ar <span class="fu">=</span> (mod a <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    br <span class="fu">=</span> (mod b <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    cr <span class="fu">=</span> (mod c <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    dr <span class="fu">=</span> (mod d <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    
+<span class="ot">tscale ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>
+tscale (((a,b),(c,d)),((e,f),(g,h)))
+    <span class="fu">|</span> ar <span class="fu">&amp;&amp;</span> br <span class="fu">&amp;&amp;</span> cr <span class="fu">&amp;&amp;</span> dr <span class="fu">&amp;&amp;</span>
+      er <span class="fu">&amp;&amp;</span> fr <span class="fu">&amp;&amp;</span> gr <span class="fu">&amp;&amp;</span> hr  <span class="fu">=</span> tscale (((div a <span class="dv">2</span>, div b <span class="dv">2</span>), (div c <span class="dv">2</span>, div d <span class="dv">2</span>)),
+                                      ((div e <span class="dv">2</span>, div f <span class="dv">2</span>), (div g <span class="dv">2</span>, div h <span class="dv">2</span>)))
+    <span class="fu">|</span> otherwise             <span class="fu">=</span> (((a,b),(c,d)),((e,f),(g,h)))
+    <span class="kw">where</span>
+    ar <span class="fu">=</span> (mod a <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    br <span class="fu">=</span> (mod b <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    cr <span class="fu">=</span> (mod c <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    dr <span class="fu">=</span> (mod d <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    er <span class="fu">=</span> (mod e <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    fr <span class="fu">=</span> (mod f <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    gr <span class="fu">=</span> (mod g <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+    hr <span class="fu">=</span> (mod h <span class="dv">2</span> <span class="fu">==</span> <span class="dv">0</span>)
+
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Exact Floating Point</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+spos, sinf, sneg,<span class="ot"> szer ::</span> <span class="dt">Matrix</span>
+spos <span class="fu">=</span> ((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>))
+sinf <span class="fu">=</span> ((<span class="dv">1</span>,<span class="fu">-</span><span class="dv">1</span>),(<span class="dv">1</span>,<span class="dv">1</span>))
+sneg <span class="fu">=</span> ((<span class="dv">0</span>,<span class="dv">1</span>),(<span class="fu">-</span><span class="dv">1</span>,<span class="dv">0</span>))
+szer <span class="fu">=</span> ((<span class="dv">1</span>,<span class="dv">1</span>),(<span class="fu">-</span><span class="dv">1</span>,<span class="dv">1</span>))
+
+ispos, isinf, isneg,<span class="ot"> iszer ::</span> <span class="dt">Lft</span>
+ispos <span class="fu">=</span> <span class="dt">LftM</span> (inverse spos)
+isinf <span class="fu">=</span> <span class="dt">LftM</span> (inverse sinf)
+isneg <span class="fu">=</span> <span class="dt">LftM</span> (inverse sneg)
+iszer <span class="fu">=</span> <span class="dt">LftM</span> (inverse szer)
+
+dneg, dzer,<span class="ot"> dpos ::</span> <span class="dt">Matrix</span>
+dneg <span class="fu">=</span> ((<span class="dv">1</span>,<span class="dv">1</span>),(<span class="dv">0</span>,<span class="dv">2</span>))
+dzer <span class="fu">=</span> ((<span class="dv">3</span>,<span class="dv">1</span>),(<span class="dv">1</span>,<span class="dv">3</span>))
+dpos <span class="fu">=</span> ((<span class="dv">2</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">1</span>))
+
+idneg, idzer,<span class="ot"> idpos ::</span> <span class="dt">Lft</span>
+idneg <span class="fu">=</span> <span class="dt">LftM</span> (inverse dneg)
+idzer <span class="fu">=</span> <span class="dt">LftM</span> (inverse dzer)
+idpos <span class="fu">=</span> <span class="dt">LftM</span> (inverse dpos)
+
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Type Cast Functions</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">utoe ::</span> <span class="dt">Uefp</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+utoe (<span class="dt">Dneg</span> u) <span class="fu">=</span> <span class="dt">ExpM</span> dneg (utoe u)
+utoe (<span class="dt">Dzer</span> u) <span class="fu">=</span> <span class="dt">ExpM</span> dzer (utoe u)
+utoe (<span class="dt">Dpos</span> u) <span class="fu">=</span> <span class="dt">ExpM</span> dpos (utoe u)
+utoe (<span class="dt">Term</span> v) <span class="fu">=</span> <span class="dt">ExpV</span> v
+
+<span class="ot">utom ::</span> <span class="dt">Uefp</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>
+utom u <span class="dv">0</span>        <span class="fu">=</span> identity
+utom (<span class="dt">Dneg</span> u) j <span class="fu">=</span> mscale (mdotm dneg (utom u (j<span class="fu">-</span><span class="dv">1</span>)))
+utom (<span class="dt">Dzer</span> u) j <span class="fu">=</span> mscale (mdotm dzer (utom u (j<span class="fu">-</span><span class="dv">1</span>)))
+utom (<span class="dt">Dpos</span> u) j <span class="fu">=</span> mscale (mdotm dpos (utom u (j<span class="fu">-</span><span class="dv">1</span>)))
+utom (<span class="dt">Term</span> v) j <span class="fu">=</span> mscale (v,v)
+
+<span class="ot">stom ::</span> <span class="dt">Sefp</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>
+stom (<span class="dt">Spos</span> u) j <span class="fu">=</span> mscale (mdotm spos (utom u j))
+stom (<span class="dt">Sinf</span> u) j <span class="fu">=</span> mscale (mdotm sinf (utom u j))
+stom (<span class="dt">Sneg</span> u) j <span class="fu">=</span> mscale (mdotm sneg (utom u j))
+stom (<span class="dt">Szer</span> u) j <span class="fu">=</span> mscale (mdotm szer (utom u j))
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Basic Arithmetic Operations</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+tadd, tsub, tmul,<span class="ot"> tdiv ::</span> <span class="dt">Tensor</span>
+tadd <span class="fu">=</span> (((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>)))
+tsub <span class="fu">=</span> (((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="fu">-</span><span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>)))
+tmul <span class="fu">=</span> (((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">0</span>)),((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>)))
+tdiv <span class="fu">=</span> (((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="dv">0</span>,<span class="dv">1</span>),(<span class="dv">0</span>,<span class="dv">0</span>)))
+
+<span class="ot">srec ::</span> <span class="dt">Sefp</span> <span class="ot">-&gt;</span> <span class="dt">Sefp</span>
+srec (<span class="dt">Spos</span> u) <span class="fu">=</span> <span class="dt">Spos</span> (urec u)
+srec (<span class="dt">Sneg</span> u) <span class="fu">=</span> <span class="dt">Sneg</span> (urec u)
+srec (<span class="dt">Szer</span> u) <span class="fu">=</span> <span class="dt">Sinf</span> (urec u)
+srec (<span class="dt">Sinf</span> u) <span class="fu">=</span> <span class="dt">Szer</span> (urec u)
+
+<span class="ot">urec ::</span> <span class="dt">Uefp</span> <span class="ot">-&gt;</span> <span class="dt">Uefp</span>
+urec (<span class="dt">Dneg</span> u)     <span class="fu">=</span> <span class="dt">Dpos</span> (urec u)
+urec (<span class="dt">Dzer</span> u)     <span class="fu">=</span> <span class="dt">Dzer</span> (urec u)
+urec (<span class="dt">Dpos</span> u)     <span class="fu">=</span> <span class="dt">Dneg</span> (urec u)
+urec (<span class="dt">Term</span> (a,b)) <span class="fu">=</span> <span class="dt">Term</span> (b,a)
+
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Linear Fractional Transformation Products</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">mdotv ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Vector</span> <span class="ot">-&gt;</span> <span class="dt">Vector</span>
+mdotv ((a,b),(c,d)) (e,f)   <span class="fu">=</span> (a <span class="fu">*</span> e <span class="fu">+</span> c <span class="fu">*</span> f,b <span class="fu">*</span> e <span class="fu">+</span> d <span class="fu">*</span> f)
+
+<span class="ot">mdotm ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>
+mdotm m (v,w) <span class="fu">=</span> (mdotv m v,mdotv m w)
+
+<span class="ot">mdott ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>
+mdott m (n,o) <span class="fu">=</span> (mdotm m n,mdotm m o)
+
+<span class="ot">tleftv ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Vector</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>
+tleftv t v <span class="fu">=</span> trightv (trans t) v
+
+<span class="ot">tleftm ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>
+tleftm t m <span class="fu">=</span> trans (trightm (trans t) m)
+
+<span class="ot">trightv ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Vector</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>
+trightv (m,n) v <span class="fu">=</span> (mdotv m v,mdotv n v)
+
+<span class="ot">trightm ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>
+trightm (m,n) o <span class="fu">=</span> (mdotm m o,mdotm n o)
+
+<span class="ot">dot ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> <span class="dt">Lft</span>
+dot <span class="dv">1</span> (<span class="dt">LftM</span> m) (<span class="dt">LftV</span> v)     <span class="fu">=</span> <span class="dt">LftV</span> (vscale (mdotv m v))
+dot <span class="dv">1</span> (<span class="dt">LftM</span> m) (<span class="dt">LftM</span> n)     <span class="fu">=</span> <span class="dt">LftM</span> (mscale (mdotm m n))
+dot <span class="dv">1</span> (<span class="dt">LftM</span> m) (<span class="dt">LftT</span> t i)   <span class="fu">=</span> <span class="dt">LftT</span> (tscale (mdott m t)) i
+dot <span class="dv">1</span> (<span class="dt">LftT</span> t i) (<span class="dt">LftV</span> v)   <span class="fu">=</span> <span class="dt">LftM</span> (mscale (tleftv t v))
+dot <span class="dv">1</span> (<span class="dt">LftT</span> t i) (<span class="dt">LftM</span> m)
+    <span class="fu">|</span> m <span class="fu">==</span> identity         <span class="fu">=</span> <span class="dt">LftT</span> t i
+    <span class="fu">|</span> otherwise             <span class="fu">=</span> <span class="dt">LftT</span> (tscale (tleftm t m)) (i<span class="fu">+</span><span class="dv">1</span>)
+dot <span class="dv">2</span> (<span class="dt">LftT</span> t i) (<span class="dt">LftV</span> v)   <span class="fu">=</span> <span class="dt">LftM</span> (mscale (trightv t v))
+dot <span class="dv">2</span> (<span class="dt">LftT</span> t i) (<span class="dt">LftM</span> m)
+    <span class="fu">|</span> m <span class="fu">==</span> identity         <span class="fu">=</span> <span class="dt">LftT</span> t i
+    <span class="fu">|</span> otherwise             <span class="fu">=</span> <span class="dt">LftT</span> (tscale (trightm t m)) (i<span class="fu">+</span><span class="dv">1</span>)
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- The Refinement Property</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">sign ::</span> <span class="dt">Vector</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span>
+sign (a,b)
+    <span class="fu">|</span> a<span class="fu">&lt;</span> <span class="dv">0</span> <span class="fu">&amp;&amp;</span> b<span class="fu">&lt;=</span><span class="dv">0</span>          <span class="fu">=</span> <span class="fu">-</span><span class="dv">1</span>
+    <span class="fu">|</span> a<span class="fu">&lt;</span> <span class="dv">0</span> <span class="fu">&amp;&amp;</span> b<span class="fu">&gt;</span> <span class="dv">0</span>          <span class="fu">=</span>  <span class="dv">0</span>
+    <span class="fu">|</span> a<span class="fu">==</span><span class="dv">0</span> <span class="fu">&amp;&amp;</span> b<span class="fu">&lt;</span> <span class="dv">0</span>          <span class="fu">=</span> <span class="fu">-</span><span class="dv">1</span>
+    <span class="fu">|</span> a<span class="fu">==</span><span class="dv">0</span> <span class="fu">&amp;&amp;</span> b<span class="fu">==</span><span class="dv">0</span>          <span class="fu">=</span>  <span class="dv">0</span>
+    <span class="fu">|</span> a<span class="fu">==</span><span class="dv">0</span> <span class="fu">&amp;&amp;</span> b<span class="fu">&gt;</span> <span class="dv">0</span>          <span class="fu">=</span>  <span class="dv">1</span>
+    <span class="fu">|</span> a<span class="fu">&gt;</span> <span class="dv">0</span> <span class="fu">&amp;&amp;</span> b<span class="fu">&lt;</span> <span class="dv">0</span>          <span class="fu">=</span>  <span class="dv">0</span>
+    <span class="fu">|</span> a<span class="fu">&gt;</span> <span class="dv">0</span> <span class="fu">&amp;&amp;</span> b<span class="fu">&gt;=</span><span class="dv">0</span>          <span class="fu">=</span>  <span class="dv">1</span>
+
+<span class="ot">vrefine ::</span> <span class="dt">Vector</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+vrefine v <span class="fu">=</span> sign v <span class="fu">/=</span> <span class="dv">0</span>
+
+<span class="ot">mrefine ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+mrefine (v,w) <span class="fu">=</span> a <span class="fu">==</span> b <span class="fu">&amp;&amp;</span> b <span class="fu">/=</span> <span class="dv">0</span>
+    <span class="kw">where</span>
+    a <span class="fu">=</span> sign v
+    b <span class="fu">=</span> sign w
+
+<span class="ot">trefine ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+trefine ((v,w),(x,y)) <span class="fu">=</span> a <span class="fu">==</span> b <span class="fu">&amp;&amp;</span> b <span class="fu">==</span> c <span class="fu">&amp;&amp;</span> c <span class="fu">==</span> d <span class="fu">&amp;&amp;</span> d <span class="fu">/=</span> <span class="dv">0</span>
+    <span class="kw">where</span>
+    a <span class="fu">=</span> sign v
+    b <span class="fu">=</span> sign w
+    c <span class="fu">=</span> sign x
+    d <span class="fu">=</span> sign y
+
+<span class="ot">refine ::</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+refine (<span class="dt">LftV</span> v) <span class="fu">=</span> vrefine v
+refine (<span class="dt">LftM</span> m) <span class="fu">=</span> mrefine m
+refine (<span class="dt">LftT</span> t i) <span class="fu">=</span> trefine t
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Square Bracket Application</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">app ::</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> (<span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>) <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+app (<span class="dt">LftM</span> m) g <span class="fu">=</span> cons (dot <span class="dv">1</span> (<span class="dt">LftM</span> m) (hd (g <span class="dv">1</span>))) (tl (g <span class="dv">1</span>))
+app (<span class="dt">LftT</span> t i) g <span class="fu">=</span> cons (dot <span class="dv">1</span> (dot <span class="dv">2</span> (<span class="dt">LftT</span> t i) (hd (g <span class="dv">2</span>))) (hd (g <span class="dv">1</span>))) h
+    <span class="kw">where</span>
+    c <span class="fu">=</span> branch (hd (g <span class="dv">1</span>))
+    h i
+        <span class="fu">|</span> i <span class="fu">&lt;=</span> c            <span class="fu">=</span> tl (g <span class="dv">1</span>) i
+        <span class="fu">|</span> otherwise         <span class="fu">=</span> tl (g <span class="dv">2</span>) (i<span class="fu">-</span>c)
+
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Tensor Absorption Strategy</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">vlessv ::</span> <span class="dt">Vector</span> <span class="ot">-&gt;</span> <span class="dt">Vector</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+vlessv v w <span class="fu">=</span> determinant (v,w) <span class="fu">&lt;</span> <span class="dv">0</span>
+
+<span class="ot">mlessv ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Vector</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+mlessv (v,w) x <span class="fu">=</span> vlessv v x <span class="fu">&amp;&amp;</span> vlessv w x
+
+<span class="ot">mlessm ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+mlessm m (v,w) <span class="fu">=</span> mlessv m v <span class="fu">&amp;&amp;</span> mlessv m w
+
+<span class="ot">mdisjointm ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+mdisjointm m n <span class="fu">=</span> mlessm m n <span class="fu">||</span> mlessm n m
+
+<span class="ot">strategyf ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span>
+strategyf t i <span class="fu">=</span> mod i <span class="dv">2</span> <span class="fu">+</span> <span class="dv">1</span>
+
+<span class="ot">strategyo ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span>
+strategyo t
+    <span class="fu">|</span> trefine t <span class="fu">=</span> strategyr t
+    <span class="fu">|</span> otherwise <span class="fu">=</span> strategyf t
+
+<span class="ot">strategyr ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span>
+strategyr t i
+    <span class="fu">|</span> mdisjointm t1 t2 <span class="fu">=</span> <span class="dv">2</span>
+    <span class="fu">|</span> otherwise        <span class="fu">=</span> <span class="dv">1</span>
+    <span class="kw">where</span>
+    t1 <span class="fu">=</span> fst (trans t)
+    t2 <span class="fu">=</span> snd (trans t)
+
+<span class="ot">decision ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+decision <span class="dv">1</span> (<span class="dt">LftM</span> m)   <span class="fu">=</span> <span class="dt">True</span>
+decision <span class="dv">1</span> (<span class="dt">LftT</span> t i) <span class="fu">=</span> strategyo t i <span class="fu">==</span> <span class="dv">1</span>
+decision <span class="dv">2</span> (<span class="dt">LftT</span> t i) <span class="fu">=</span> strategyo t i <span class="fu">==</span> <span class="dv">2</span>
+
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Basic Expression Tree Functions</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">branch ::</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span>
+branch (<span class="dt">LftV</span> v) <span class="fu">=</span> <span class="dv">0</span>
+branch (<span class="dt">LftM</span> m) <span class="fu">=</span> <span class="dv">1</span>
+branch (<span class="dt">LftT</span> t i) <span class="fu">=</span> <span class="dv">2</span>
+
+<span class="ot">vis ::</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+vis (<span class="dt">LftV</span> v) <span class="fu">=</span> <span class="dt">True</span>
+vis e <span class="fu">=</span> <span class="dt">False</span>
+
+<span class="ot">mis ::</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+mis (<span class="dt">LftM</span> m) <span class="fu">=</span> <span class="dt">True</span>
+mis e <span class="fu">=</span> <span class="dt">False</span>
+
+<span class="ot">tis ::</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+tis (<span class="dt">LftT</span> t i) <span class="fu">=</span> <span class="dt">True</span>
+tis e <span class="fu">=</span> <span class="dt">False</span>
+
+<span class="ot">cons ::</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> (<span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>) <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+cons (<span class="dt">LftV</span> v) f <span class="fu">=</span> <span class="dt">ExpV</span> v
+cons (<span class="dt">LftM</span> m) f <span class="fu">=</span> <span class="dt">ExpM</span> m (f <span class="dv">1</span>)
+cons (<span class="dt">LftT</span> t i) f <span class="fu">=</span> <span class="dt">ExpT</span> t i (f <span class="dv">1</span>) (f <span class="dv">2</span>)
+
+<span class="ot">hd ::</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Lft</span>
+hd (<span class="dt">ExpV</span> v) <span class="fu">=</span> <span class="dt">LftV</span> v
+hd (<span class="dt">ExpM</span> m e) <span class="fu">=</span> <span class="dt">LftM</span> m
+hd (<span class="dt">ExpT</span> t i e f) <span class="fu">=</span> <span class="dt">LftT</span> t i
+
+<span class="ot">tl ::</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+tl (<span class="dt">ExpM</span> m e) <span class="dv">1</span>     <span class="fu">=</span> e
+tl (<span class="dt">ExpT</span> t i e f) <span class="dv">1</span> <span class="fu">=</span> e
+tl (<span class="dt">ExpT</span> t i e f) <span class="dv">2</span> <span class="fu">=</span> f
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Normalization Functions</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">sem ::</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Sefp</span>
+sem (<span class="dt">ExpV</span> v)
+    <span class="fu">|</span> refine (dot <span class="dv">1</span> ispos (<span class="dt">LftV</span> v)) <span class="fu">=</span> <span class="dt">Spos</span> (dem (app ispos (one (<span class="dt">ExpV</span> v))))
+    <span class="fu">|</span> refine (dot <span class="dv">1</span> isneg (<span class="dt">LftV</span> v)) <span class="fu">=</span> <span class="dt">Sneg</span> (dem (app isneg (one (<span class="dt">ExpV</span> v))))
+sem e
+    <span class="fu">|</span> refine (dot <span class="dv">1</span> iszer l) <span class="fu">=</span> <span class="dt">Szer</span> (dem (app iszer (one e)))
+    <span class="fu">|</span> refine (dot <span class="dv">1</span> isinf l) <span class="fu">=</span> <span class="dt">Sinf</span> (dem (app isinf (one e)))
+    <span class="fu">|</span> refine (dot <span class="dv">1</span> ispos l) <span class="fu">=</span> <span class="dt">Spos</span> (dem (app ispos (one e)))
+    <span class="fu">|</span> refine (dot <span class="dv">1</span> isneg l) <span class="fu">=</span> <span class="dt">Sneg</span> (dem (app isneg (one e)))
+    <span class="fu">|</span> otherwise              <span class="fu">=</span> sem (app l f)
+    <span class="kw">where</span>
+    l <span class="fu">=</span> hd e
+    f d <span class="fu">=</span> ab l (tl e d) (decision d l)
+
+<span class="ot">dem ::</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Uefp</span>
+dem (<span class="dt">ExpV</span> v) <span class="fu">=</span> <span class="dt">Term</span> v
+dem e
+    <span class="fu">|</span> refine (dot <span class="dv">1</span> idneg l) <span class="fu">=</span> <span class="dt">Dneg</span> (dem (app idneg (one e)))
+    <span class="fu">|</span> refine (dot <span class="dv">1</span> idpos l) <span class="fu">=</span> <span class="dt">Dpos</span> (dem (app idpos (one e)))
+    <span class="fu">|</span> refine (dot <span class="dv">1</span> idzer l) <span class="fu">=</span> <span class="dt">Dzer</span> (dem (app idzer (one e)))
+    <span class="fu">|</span> otherwise              <span class="fu">=</span> dem (app l f)
+    <span class="kw">where</span>
+    l <span class="fu">=</span> hd e
+    f d <span class="fu">=</span> ab l (tl e d) (decision d l)
+
+<span class="ot">ab ::</span> <span class="dt">Lft</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+ab k e b
+    <span class="fu">|</span> not b               <span class="fu">=</span> <span class="dt">ExpM</span> identity e
+    <span class="fu">|</span> tis k <span class="fu">&amp;&amp;</span> tis (hd e) <span class="fu">=</span> utoe (dem e)
+    <span class="fu">|</span> otherwise           <span class="fu">=</span> e
+
+
+<span class="ot">sshow ::</span> [<span class="dt">Integer</span>] <span class="ot">-&gt;</span> [<span class="dt">Char</span>]
+sshow []      <span class="fu">=</span> <span class="st">&quot;unbounded&quot;</span>
+sshow (e <span class="fu">:</span> m) <span class="fu">=</span> (showsign v) <span class="fu">++</span> (showm v) <span class="fu">++</span> (showe h)
+    <span class="kw">where</span>
+    f <span class="fu">=</span> (foldr g <span class="dv">0</span>) <span class="fu">.</span> reverse
+    g d c <span class="fu">=</span> d<span class="fu">+</span><span class="dv">10</span><span class="fu">*</span>c
+    (h,l,v) <span class="fu">=</span> normalize (e,fromIntegral (length m), f m)
+
+<span class="ot">normalize ::</span> (<span class="dt">Integer</span>, <span class="dt">Integer</span>, <span class="dt">Integer</span>) <span class="ot">-&gt;</span> (<span class="dt">Integer</span>, <span class="dt">Integer</span>, <span class="dt">Integer</span>)
+normalize (e,l,v)
+    <span class="fu">|</span> l<span class="fu">&gt;</span><span class="dv">0</span> <span class="fu">&amp;&amp;</span> (abs v)<span class="fu">&lt;</span><span class="dv">10</span><span class="fu">^</span>(l<span class="fu">-</span><span class="dv">1</span>) <span class="fu">=</span> normalize (e<span class="fu">-</span><span class="dv">1</span>,l<span class="fu">-</span><span class="dv">1</span>,v)
+    <span class="fu">|</span> otherwise               <span class="fu">=</span> (e,l,v)
+
+<span class="ot">showsign ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> [<span class="dt">Char</span>]
+showsign v
+  <span class="fu">|</span> v <span class="fu">&lt;</span> <span class="dv">0</span>     <span class="fu">=</span> <span class="st">&quot;-&quot;</span>
+  <span class="fu">|</span> otherwise <span class="fu">=</span> <span class="st">&quot;&quot;</span>
+
+<span class="ot">showm ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> [<span class="dt">Char</span>]
+showm v
+    <span class="fu">|</span> v <span class="fu">==</span> <span class="dv">0</span> <span class="fu">=</span> <span class="st">&quot;0&quot;</span>
+    <span class="fu">|</span> v <span class="fu">/=</span> <span class="dv">0</span> <span class="fu">=</span> <span class="st">&quot;0.&quot;</span> <span class="fu">++</span> show (abs v)
+
+<span class="ot">showe ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> [<span class="dt">Char</span>]
+showe e <span class="fu">=</span> <span class="st">&quot;e&quot;</span> <span class="fu">++</span> show e
+
+<span class="ot">scientific ::</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> [<span class="dt">Integer</span>]
+scientific m n
+    <span class="fu">|</span> vrefine (mdotv (inverse m) (<span class="dv">1</span>,<span class="dv">0</span>)) <span class="fu">=</span> []
+    <span class="fu">|</span> mrefine (mdotm (inverse szer) m)  <span class="fu">=</span> n <span class="fu">:</span> (mantissa (<span class="fu">-</span><span class="dv">9</span>) <span class="dv">9</span> m)
+    <span class="fu">|</span> otherwise                         <span class="fu">=</span> scientific (mdotm ((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">10</span>)) m) (n<span class="fu">+</span><span class="dv">1</span>)
+
+<span class="ot">mantissa ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span> <span class="ot">-&gt;</span> [<span class="dt">Integer</span>]
+mantissa i n m
+    <span class="fu">|</span> c i       <span class="fu">=</span> i <span class="fu">:</span> mantissa (<span class="fu">-</span><span class="dv">9</span>) <span class="dv">9</span> (e i)
+    <span class="fu">|</span> i <span class="fu">&lt;</span> n     <span class="fu">=</span> mantissa (i<span class="fu">+</span><span class="dv">1</span>) n m
+    <span class="fu">|</span> otherwise <span class="fu">=</span> []
+    <span class="kw">where</span>
+    c n <span class="fu">=</span> mrefine (mdotm (inverse (d n)) m)
+    d n <span class="fu">=</span> ((n<span class="fu">+</span><span class="dv">1</span>,<span class="dv">10</span>),(n<span class="fu">-</span><span class="dv">1</span>,<span class="dv">10</span>))
+    e n <span class="fu">=</span> mdotm ((<span class="dv">10</span>,<span class="dv">0</span>),(<span class="fu">-</span>n,<span class="dv">1</span>)) m
+
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="co">-- Elementary functions</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="ot">eiterate ::</span> (<span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>) <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+eiterate i n <span class="fu">=</span> <span class="dt">ExpM</span> (i n) (eiterate i (n<span class="fu">+</span><span class="dv">1</span>))
+
+<span class="ot">eiteratex ::</span> (<span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>) <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+eiteratex i n x <span class="fu">=</span> <span class="dt">ExpT</span> (i n) <span class="dv">0</span> x (eiteratex i (n<span class="fu">+</span><span class="dv">1</span>) x)
+
+<span class="ot">esqrtrat ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+esqrtrat p q <span class="fu">=</span> rollover p q (p<span class="fu">-</span>q)
+
+<span class="ot">rollover ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+rollover a b c
+    <span class="fu">|</span> d<span class="fu">&gt;=</span><span class="dv">0</span>      <span class="fu">=</span> <span class="dt">ExpM</span> dneg (rollover (<span class="dv">4</span><span class="fu">*</span>a) d c)
+    <span class="fu">|</span> otherwise <span class="fu">=</span> <span class="dt">ExpM</span> dpos (rollover (<span class="fu">-</span>d) (<span class="dv">4</span><span class="fu">*</span>b) c)
+    <span class="kw">where</span>
+    d <span class="fu">=</span> <span class="dv">2</span><span class="fu">*</span>(b<span class="fu">-</span>a) <span class="fu">+</span> c
+
+<span class="ot">itersqrtspos ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>
+itersqrtspos n <span class="fu">=</span> (((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">2</span>,<span class="dv">1</span>)),((<span class="dv">1</span>,<span class="dv">2</span>),(<span class="dv">0</span>,<span class="dv">1</span>)))
+
+<span class="ot">iterlogspos ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>
+iterlogspos <span class="dv">0</span> <span class="fu">=</span> (((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">1</span>)),((<span class="fu">-</span><span class="dv">1</span>,<span class="dv">1</span>),(<span class="fu">-</span><span class="dv">1</span>,<span class="dv">0</span>)))
+iterlogspos n <span class="fu">=</span> (((n,<span class="dv">0</span>),(<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>,n<span class="fu">+</span><span class="dv">1</span>)),((n<span class="fu">+</span><span class="dv">1</span>,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>),(<span class="dv">0</span>,n)))
+
+<span class="ot">ee ::</span> <span class="dt">Expression</span>
+ee <span class="fu">=</span> eiterate itere <span class="dv">0</span>
+
+<span class="ot">itere ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>
+itere n <span class="fu">=</span> ((<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">2</span>,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>),(<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>,<span class="dv">2</span><span class="fu">*</span>n))
+
+<span class="ot">eexpszer ::</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+eexpszer <span class="fu">=</span> eiteratex iterexpszer <span class="dv">0</span>
+
+<span class="ot">iterexpszer ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>
+iterexpszer n <span class="fu">=</span> (((<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">2</span>,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>),(<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>,<span class="dv">2</span><span class="fu">*</span>n)),
+                 ((<span class="dv">2</span><span class="fu">*</span>n,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>),(<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">2</span>)))
+
+
+<span class="ot">eomega ::</span> <span class="dt">Expression</span>
+eomega <span class="fu">=</span> eiterate iteromega <span class="dv">0</span>
+<span class="ot">iteromega ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Matrix</span>
+
+iteromega <span class="dv">0</span> <span class="fu">=</span> ((<span class="dv">6795705</span>,<span class="dv">213440</span>),(<span class="dv">6795704</span>,<span class="dv">213440</span>))
+iteromega n <span class="fu">=</span> ((e<span class="fu">-</span>d<span class="fu">-</span>c,e<span class="fu">+</span>d<span class="fu">+</span>c),(e<span class="fu">+</span>d<span class="fu">-</span>c,e<span class="fu">-</span>d<span class="fu">+</span>c))
+    <span class="kw">where</span>
+    b <span class="fu">=</span> (<span class="dv">2</span><span class="fu">*</span>n<span class="fu">-</span><span class="dv">1</span>)<span class="fu">*</span>(<span class="dv">6</span><span class="fu">*</span>n<span class="fu">-</span><span class="dv">5</span>)<span class="fu">*</span>(<span class="dv">6</span><span class="fu">*</span>n<span class="fu">-</span><span class="dv">1</span>)
+    c <span class="fu">=</span> b<span class="fu">*</span>(<span class="dv">545140134</span><span class="fu">*</span>n <span class="fu">+</span> <span class="dv">13591409</span>)
+    d <span class="fu">=</span> b<span class="fu">*</span>(n<span class="fu">+</span><span class="dv">1</span>)
+    e <span class="fu">=</span> <span class="dv">10939058860032000</span><span class="fu">*</span>n<span class="fu">^</span><span class="dv">4</span>
+
+<span class="ot">etanszer ::</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+etanszer <span class="fu">=</span> eiteratex itertanszer <span class="dv">0</span>
+
+<span class="ot">itertanszer ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>
+itertanszer <span class="dv">0</span> <span class="fu">=</span> (((<span class="dv">1</span>,<span class="dv">2</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="fu">-</span><span class="dv">1</span>,<span class="dv">0</span>),(<span class="fu">-</span><span class="dv">1</span>,<span class="dv">2</span>)))
+itertanszer n <span class="fu">=</span> (((<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">3</span>),(<span class="dv">2</span><span class="fu">*</span>n<span class="fu">-</span><span class="dv">1</span>,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>)),
+                 ((<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">-</span><span class="dv">1</span>),(<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">3</span>,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>)))
+
+<span class="ot">earctanszer ::</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+earctanszer <span class="fu">=</span> eiteratex iterarctanszer <span class="dv">0</span>
+
+<span class="ot">iterarctanszer ::</span> <span class="dt">Integer</span> <span class="ot">-&gt;</span> <span class="dt">Tensor</span>
+iterarctanszer <span class="dv">0</span> <span class="fu">=</span> (((<span class="dv">1</span>,<span class="dv">2</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="fu">-</span><span class="dv">1</span>,<span class="dv">0</span>),(<span class="fu">-</span><span class="dv">1</span>,<span class="dv">2</span>)))
+iterarctanszer n <span class="fu">=</span> (((<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>,n<span class="fu">+</span><span class="dv">1</span>),(n,<span class="dv">0</span>)),((<span class="dv">0</span>,n),(n<span class="fu">+</span><span class="dv">1</span>,<span class="dv">2</span><span class="fu">*</span>n<span class="fu">+</span><span class="dv">1</span>)))
+
+<span class="fu">-----------------------------------------------------------------------</span>
+<span class="co">-- half, dbl, quad - multiplication with 1/2, 2, 4</span>
+<span class="co">-- sinT, cosT, tanT - tensor used for construction of</span>
+<span class="co">--  sin, cos, tan function</span>
+<span class="fu">-----------------------------------------------------------------------</span>
+half, dbl,<span class="ot"> quad ::</span> <span class="dt">Matrix</span>
+half <span class="fu">=</span> ((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">2</span>))
+dbl  <span class="fu">=</span> ((<span class="dv">2</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>))
+quad <span class="fu">=</span> ((<span class="dv">4</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>))
+
+<span class="ot">reconePx2 ::</span> <span class="dt">Tensor</span>
+reconePx2 <span class="fu">=</span> (((<span class="dv">0</span>,<span class="dv">1</span>),(<span class="dv">0</span>,<span class="dv">0</span>)),((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">1</span>)))
+
+<span class="fu">--------------------------------------------------------------------------</span>
+<span class="co">-- stoe - converts signed efp to expression</span>
+<span class="co">-- s - signed efp, u - unsigned efp</span>
+<span class="co">-- us - uncompressed signed efp, uu - uncompressed unsigned efp</span>
+<span class="fu">--------------------------------------------------------------------------</span>
+<span class="ot">stoe ::</span> <span class="dt">Sefp</span> <span class="ot">-&gt;</span> <span class="dt">Expression</span>
+stoe (<span class="dt">Spos</span> u) <span class="fu">=</span> <span class="dt">ExpM</span> spos (utoe u)
+stoe (<span class="dt">Sneg</span> u) <span class="fu">=</span> <span class="dt">ExpM</span> sneg (utoe u)
+stoe (<span class="dt">Szer</span> u) <span class="fu">=</span> <span class="dt">ExpM</span> szer (utoe u)
+stoe (<span class="dt">Sinf</span> u) <span class="fu">=</span> <span class="dt">ExpM</span> sinf (utoe u)
+
+<span class="ot">stous ::</span> <span class="dt">Sefp</span> <span class="ot">-&gt;</span> <span class="dt">Usefp</span>
+stous (<span class="dt">Spos</span> u) <span class="fu">=</span> (<span class="st">&quot;spos&quot;</span>, utouu u)
+stous (<span class="dt">Sinf</span> u) <span class="fu">=</span> (<span class="st">&quot;sinf&quot;</span>, utouu u)
+stous (<span class="dt">Sneg</span> u) <span class="fu">=</span> (<span class="st">&quot;sneg&quot;</span>, utouu u)
+stous (<span class="dt">Szer</span> u) <span class="fu">=</span> (<span class="st">&quot;szer&quot;</span>, utouu u)
+
+<span class="ot">utouu ::</span> <span class="dt">Uefp</span> <span class="ot">-&gt;</span> <span class="dt">Uuefp</span>
+utouu (<span class="dt">Dneg</span> u) <span class="fu">=</span> (<span class="fu">-</span><span class="dv">1</span>) <span class="fu">:</span> utouu u
+utouu (<span class="dt">Dzer</span> u) <span class="fu">=</span>   <span class="dv">0</span>  <span class="fu">:</span> utouu u
+utouu (<span class="dt">Dpos</span> u) <span class="fu">=</span>   <span class="dv">1</span>  <span class="fu">:</span> utouu u
+utouu (<span class="dt">Term</span> (v1,v2)) <span class="fu">=</span>  [<span class="dv">2</span>,v1,v2]
+
+<span class="ot">ustos ::</span> <span class="dt">Usefp</span> <span class="ot">-&gt;</span> <span class="dt">Sefp</span>
+ustos (<span class="st">&quot;spos&quot;</span>, u) <span class="fu">=</span> <span class="dt">Spos</span> (uutou u)
+ustos (<span class="st">&quot;sneg&quot;</span>, u) <span class="fu">=</span> <span class="dt">Sneg</span> (uutou u)
+ustos (<span class="st">&quot;szer&quot;</span>, u) <span class="fu">=</span> <span class="dt">Szer</span> (uutou u)
+ustos (<span class="st">&quot;sinf&quot;</span>, u) <span class="fu">=</span> <span class="dt">Sinf</span> (uutou u)
+
+<span class="ot">uutou ::</span> <span class="dt">Uuefp</span> <span class="ot">-&gt;</span> <span class="dt">Uefp</span>
+uutou []      <span class="fu">=</span> <span class="dt">Term</span> (<span class="dv">1</span>,<span class="dv">1</span>)
+uutou (<span class="fu">-</span><span class="dv">1</span><span class="fu">:</span>xs) <span class="fu">=</span> <span class="dt">Dneg</span> (uutou xs)
+uutou ( <span class="dv">0</span><span class="fu">:</span>xs) <span class="fu">=</span> <span class="dt">Dzer</span> (uutou xs)
+uutou ( <span class="dv">1</span><span class="fu">:</span>xs) <span class="fu">=</span> <span class="dt">Dpos</span> (uutou xs)
+
+<span class="fu">--------------------------------------------------------------------------</span>
+<span class="fu">--------------------------------------------------------------------------</span>
+
+<span class="kw">instance</span> <span class="dt">Floating</span> <span class="dt">Expression</span> <span class="kw">where</span>
+  pi <span class="fu">=</span> <span class="dt">ExpT</span> tdiv <span class="dv">0</span> (esqrtrat <span class="dv">10005</span> <span class="dv">1</span>) eomega
+  exp e <span class="fu">=</span> head (mrgExps tmul xL) <span class="kw">where</span>
+    xL <span class="fu">=</span> map (eexpszer <span class="fu">.</span> (app iszer) <span class="fu">.</span> one) yL
+    yL <span class="fu">=</span> replicate (fromInteger <span class="dv">2</span><span class="fu">^</span>k) y
+    y  <span class="fu">=</span> app (<span class="dt">LftM</span> ((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">2</span><span class="fu">^</span>k))) (one e)
+    k  <span class="fu">=</span> findk e
+  <span class="co">-- quadratic fractional transformation</span>
+  sin e <span class="fu">=</span> app (<span class="dt">LftT</span> sinT <span class="dv">0</span>) f <span class="kw">where</span>
+    sinT <span class="fu">=</span> (((<span class="dv">0</span>,<span class="dv">1</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>)))
+    f _ <span class="fu">=</span> stoe <span class="fu">$</span> sem <span class="fu">$</span> tan (app (<span class="dt">LftM</span> half) (one e) ) 
+  <span class="co">-- quadratic fractional transformation</span>
+  cos e <span class="fu">=</span> app (<span class="dt">LftT</span> cosT <span class="dv">0</span>) f <span class="kw">where</span>
+    cosT <span class="fu">=</span> (((<span class="fu">-</span><span class="dv">1</span>,<span class="dv">1</span>),(<span class="dv">0</span>,<span class="dv">0</span>)),((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="dv">1</span>,<span class="dv">1</span>)))
+    f _ <span class="fu">=</span> stoe <span class="fu">$</span> sem <span class="fu">$</span> tan (app (<span class="dt">LftM</span> half) (one e) )
+  <span class="co">-- quadratic fractional transformation</span>
+  sinh e <span class="fu">=</span> app (<span class="dt">LftT</span> sinhT <span class="dv">0</span>) f <span class="kw">where</span>
+    sinhT <span class="fu">=</span> (((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>)),((<span class="dv">0</span>,<span class="dv">1</span>),(<span class="fu">-</span><span class="dv">1</span>,<span class="dv">0</span>)))
+    f _ <span class="fu">=</span> stoe <span class="fu">$</span> sem <span class="fu">$</span> exp e
+  <span class="co">-- quadratic fractional transformation</span>
+  cosh e <span class="fu">=</span> app (<span class="dt">LftT</span> coshT <span class="dv">0</span>) f <span class="kw">where</span>
+    coshT <span class="fu">=</span> (((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>)),((<span class="dv">0</span>,<span class="dv">1</span>),(<span class="dv">1</span>,<span class="dv">0</span>)))
+    f _ <span class="fu">=</span> stoe <span class="fu">$</span> sem <span class="fu">$</span> exp e
+  <span class="co">-- quadratic fractional transformation</span>
+  tanh e <span class="fu">=</span> app (<span class="dt">LftT</span> tanhT <span class="dv">0</span>) f <span class="kw">where</span>
+    tanhT <span class="fu">=</span> (((<span class="dv">1</span>,<span class="dv">1</span>),(<span class="dv">0</span>,<span class="dv">0</span>)),((<span class="dv">0</span>,<span class="dv">0</span>),(<span class="fu">-</span><span class="dv">1</span>,<span class="dv">1</span>)))
+    f _ <span class="fu">=</span> stoe <span class="fu">$</span> sem <span class="fu">$</span> exp e
+  sqrt <span class="fu">=</span> eiteratex itersqrtspos <span class="dv">0</span>
+  log <span class="fu">=</span> eiteratex iterlogspos <span class="dv">0</span>
+  tan e <span class="fu">=</span> head (mrgExps tanT xL) <span class="kw">where</span>
+    tanT <span class="fu">=</span> (((<span class="dv">0</span>,<span class="fu">-</span><span class="dv">1</span>),(<span class="dv">1</span>,<span class="dv">0</span>)),((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">1</span>)))
+    xL <span class="fu">=</span> map (etanszer <span class="fu">.</span> (app iszer) <span class="fu">.</span> one) yL
+    yL <span class="fu">=</span> replicate (fromInteger <span class="dv">2</span><span class="fu">^</span>k) y
+    y  <span class="fu">=</span> app (<span class="dt">LftM</span> ((<span class="dv">1</span>,<span class="dv">0</span>),(<span class="dv">0</span>,<span class="dv">2</span><span class="fu">^</span>k))) (one e)
+    k  <span class="fu">=</span> findk e
+
+  atan e <span class="fu">=</span> earctanszer (app iszer (one e))
+<span class="co">{-</span>
+<span class="co">  atan e</span>
+<span class="co">    | m &gt; 0         = app (LftT (((0,0),(4,0)),((1,0),(0,4))) 0) f</span>
+<span class="co">    | otherwise     = app (LftT (((0,0),(4,0)),((3,0),(0,4))) 0) g</span>
+<span class="co">    where</span>
+<span class="co">    f 1 = (stoe . sem) (earctanszer e)</span>
+<span class="co">    f 2 = (stoe . sem) epi</span>
+<span class="co">    g 1 = (stoe . sem) (earctanszer (app isneg (one e)))</span>
+<span class="co">    g 2 = (stoe . sem) epi</span>
+<span class="co">    m   = fst (splitres (eshow e 5))</span>
+<span class="co">-}</span>
+
+<span class="fu">--------------------------------------------------------------------------</span>
+<span class="fu">--------------------------------------------------------------------------</span>
+<span class="ot">findk ::</span> <span class="dt">Expression</span> <span class="ot">-&gt;</span> <span class="dt">Integer</span>
+findk a
+    <span class="fu">|</span> f a <span class="fu">&lt;</span> <span class="dv">1</span>       <span class="fu">=</span> <span class="dv">0</span>
+    <span class="fu">|</span> otherwise     <span class="fu">=</span> ceiling (logBase <span class="fl">2.0</span> (f a))
+    <span class="kw">where</span>
+    f x   <span class="fu">=</span> fromInteger (abs m) <span class="fu">*</span> <span class="dv">10</span><span class="fu">^^</span>(fromInteger e)
+    (m,e) <span class="fu">=</span> splitres (eshow a <span class="dv">10</span>)
+
+<span class="ot">mrgExps ::</span> <span class="dt">Tensor</span> <span class="ot">-&gt;</span> [<span class="dt">Expression</span>] <span class="ot">-&gt;</span> [<span class="dt">Expression</span>]
+mrgExps t []            <span class="fu">=</span> []
+mrgExps t [x]           <span class="fu">=</span> [x]
+mrgExps t (x<span class="fu">:</span>y<span class="fu">:</span>xs)      <span class="fu">=</span> mrgExps t ( (app (<span class="dt">LftT</span> t <span class="dv">0</span>) f) <span class="fu">:</span> (mrgExps t xs) )
+    <span class="kw">where</span>
+    f <span class="dv">1</span> <span class="fu">=</span> (stoe <span class="fu">.</span> sem) x
+    f <span class="dv">2</span> <span class="fu">=</span> (stoe <span class="fu">.</span> sem) y
+
+<span class="ot">splitres ::</span> [<span class="dt">Char</span>] <span class="ot">-&gt;</span> (<span class="dt">Integer</span>, <span class="dt">Integer</span>)
+splitres (<span class="ch">&#39;0&#39;</span><span class="fu">:</span><span class="ch">&#39;e&#39;</span><span class="fu">:</span>xs)       <span class="fu">=</span> (<span class="dv">0</span>,<span class="dv">0</span>)
+splitres <span class="st">&quot;unbounded&quot;</span>        <span class="fu">=</span> error <span class="st">&quot;Error, the value is unbounded&quot;</span>
+splitres res
+    <span class="fu">|</span> elem <span class="ch">&#39;/&#39;</span> res          <span class="fu">=</span> splitres (mshow ((a,b),(a<span class="fu">*</span><span class="dv">10</span><span class="fu">^</span><span class="dv">9</span>,b<span class="fu">*</span><span class="dv">10</span><span class="fu">^</span><span class="dv">9</span><span class="fu">+</span><span class="dv">1</span>)))
+    <span class="fu">|</span> not (elem <span class="ch">&#39;.&#39;</span> res)    <span class="fu">=</span> f (read res, <span class="dv">0</span>)
+    <span class="fu">|</span> otherwise             <span class="fu">=</span> (finde <span class="fu">.</span> findm <span class="fu">.</span> finds) res
+    <span class="kw">where</span>
+    a  <span class="fu">=</span> read ( takeWhile (<span class="fu">/=</span> <span class="ch">&#39;/&#39;</span>) res )
+    b  <span class="fu">=</span> read ( tail (dropWhile (<span class="fu">/=</span> <span class="ch">&#39;/&#39;</span>) res) )
+    f (x,y)
+        <span class="fu">|</span> mod x <span class="dv">10</span> <span class="fu">==</span> <span class="dv">0</span> <span class="fu">&amp;&amp;</span> x<span class="fu">&gt;</span><span class="dv">0</span> <span class="fu">=</span> f (div x <span class="dv">10</span>, y<span class="fu">+</span><span class="dv">1</span>)
+        <span class="fu">|</span> otherwise            <span class="fu">=</span> (x,y)
+
+<span class="ot">finds ::</span> [<span class="dt">Char</span>] <span class="ot">-&gt;</span> (<span class="dt">Integer</span>, [<span class="dt">Char</span>])
+finds (<span class="ch">&#39;-&#39;</span><span class="fu">:</span><span class="ch">&#39;0&#39;</span><span class="fu">:</span><span class="ch">&#39;.&#39;</span><span class="fu">:</span>xs)      <span class="fu">=</span> (<span class="fu">-</span><span class="dv">1</span>,xs)
+finds (<span class="ch">&#39;0&#39;</span><span class="fu">:</span><span class="ch">&#39;.&#39;</span><span class="fu">:</span>xs)          <span class="fu">=</span> (<span class="dv">1</span>,xs)
+finds _                     <span class="fu">=</span> error <span class="st">&quot;Error No 21&quot;</span>
+
+<span class="ot">findm ::</span> (<span class="dt">Integer</span>, [<span class="dt">Char</span>]) <span class="ot">-&gt;</span> (<span class="dt">Integer</span>, [<span class="dt">Char</span>])
+findm (s,me)                <span class="fu">=</span> (s <span class="fu">*</span> m,e)
+    <span class="kw">where</span>
+    m <span class="fu">=</span> read (takeWhile isDigit me)
+    e <span class="fu">=</span> dropWhile isDigit me
+
+<span class="ot">finde ::</span> (<span class="dt">Integer</span>, [<span class="dt">Char</span>]) <span class="ot">-&gt;</span> (<span class="dt">Integer</span>, <span class="dt">Integer</span>)
+finde (sm,<span class="ch">&#39;e&#39;</span><span class="fu">:</span>xs)           <span class="fu">=</span> (sm, read xs <span class="fu">-</span> fromIntegral len)
+    <span class="kw">where</span>
+    len
+        <span class="fu">|</span> sm<span class="fu">&lt;</span><span class="dv">0</span>              <span class="fu">=</span> length (show sm) <span class="fu">-</span> <span class="dv">1</span>
+        <span class="fu">|</span> otherwise         <span class="fu">=</span> length (show sm)
+finde (sm,_)                <span class="fu">=</span> error <span class="st">&quot;Error No 22&quot;</span></code></pre></div>
+<h2 id="wrapping-up">Wrapping up</h2>
+<p>Many thanks to <a href="https://github.com/ekmett">Edward Kmett</a> for showing me this stuff after a sleepless night <code>:)</code></p>
+<ul>
+<li><a href="https://pi.math.cornell.edu/~hatcher/TN/TNbook.pdf">Topology of numbers by Allen Hatcher</a></li>
+<li><a href="https://github.com/bollu/fractions/blob/master/Fractions.lhs">Check the literate haskell file out on github</a></li>
+</ul>
+<h2 id="extra-pretty-pictures">Extra pretty pictures</h2>
+<p><img src="docs/semicircle-convergence-square-root-2.png"/></p>
+<p><img src="docs/seven-by-sixtreen-tri.png"/></p>
+<p><img src="docs/stern-brocot.png"/></p>
+<p><img src="docs/three-by-eight-tri-semicircle-convergence.png"/></p>
+</body>
+</html>
